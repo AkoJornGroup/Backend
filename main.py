@@ -37,6 +37,7 @@ app.add_middleware(
 class Ticket( BaseModel ):
     ticketName: str
     price: int
+    amount: int
 
 class Event(BaseModel):
     eventId: str
