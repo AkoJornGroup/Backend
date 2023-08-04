@@ -12,6 +12,7 @@ app = FastAPI()
 load_dotenv( '.env' )
 user = os.getenv( 'user' )
 password = os.getenv( 'password' )
+MY_VARIABLE = os.getenv('MY_VARIABLE')
 
 #   Connect to MongoDB
 client = MongoClient(f"mongodb+srv://{user}:{password}@cluster0.dpx3ndy.mongodb.net/")
@@ -59,7 +60,7 @@ class Event(BaseModel):
 #   Root
 @app.get('/')
 def read_root():
-    return {'Hello': 'World'}
+    return { 'details' : f'Hello, this is EventBud API. Please go to {MY_VARIABLE} for more details.' }
 
 #   Get Event Details
 @app.get('/event/{eventId}')
