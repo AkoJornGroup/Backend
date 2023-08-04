@@ -60,7 +60,7 @@ class Event(BaseModel):
 #   Root
 @app.get('/')
 def read_root():
-    return { 'details' : f'Hello, this is EventBud API. Please go to {MY_VARIABLE} for more details.' }
+    return { 'details' : f'Hello, this is EventBud API. Please go to {MY_VARIABLE} {user} for more details.' }
 
 #   Get Event Details
 @app.get('/event/{eventId}')
