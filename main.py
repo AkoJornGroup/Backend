@@ -65,6 +65,10 @@ class User( BaseModel ):
     lastName: str
     password_hash: str
     salt: str
+
+class Login( BaseModel ):
+    email: str
+    password: str
     
 
 ##############################################################
@@ -72,13 +76,14 @@ class User( BaseModel ):
 #   Helper Functions
 #
 
-def hash_password( password ):
+def hash_password( password, salt = None ):
     '''
         Hash password with salt
         Input: password (str)
         Output: password_hash (str), password_salt (str)
     '''
-    salt = uuid.uuid4().hex
+    if not salt:
+        salt = uuid.uuid4().hex
     password_salt = ( password + salt ).encode( 'utf-8' )
     password_hash = hashlib.sha512( password_salt ).hexdigest()
     return password_hash, password_salt
@@ -135,5 +140,31 @@ def signup( register: Register ):
         salt = password_salt
     )
     collection.insert_one( newUser.dict() )
+    
+    return { 'result' : 'success' }
+
+#   Login
+@app.post('/login')
+def login( login: Login ):
+    '''
+        Login
+        Input: login (Login)
+        Output: result (dict)
+    '''
+
+    #   Connect to MongoDB
+    collection = db['User']
+
+    #   Check if email exists
+    user = collection.find_one( { 'email' : login.email } )
+    if not user:
+        raise HTTPException( status_code = 400, detail = 'Email or Password incorrect' )
+    
+    #   Hash password
+    password_hash, _ = hash_password( login.password, user['salt'] )
+
+    #   Check if password is correct
+    if password_hash != user['password_hash']:
+        raise HTTPException( status_code = 400, detail = 'Email or Password incorrect' )
     
     return { 'result' : 'success' }
