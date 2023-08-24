@@ -66,7 +66,7 @@ class User( BaseModel ):
     password_hash: str
     salt: str
 
-class Login( BaseModel ):
+class Signin( BaseModel ):
     email: str
     password: str
     
@@ -143,12 +143,12 @@ def signup( register: Register ):
     
     return { 'result' : 'success' }
 
-#   Login
-@app.post('/login')
-def login( login: Login ):
+#   Signin
+@app.post('/signin')
+def signin( signin: Signin ):
     '''
-        Login
-        Input: login (Login)
+        Signin
+        Input: signin (Signin)
         Output: result (dict)
     '''
 
@@ -156,12 +156,12 @@ def login( login: Login ):
     collection = db['User']
 
     #   Check if email exists
-    user = collection.find_one( { 'email' : login.email } )
+    user = collection.find_one( { 'email' : signin.email } )
     if not user:
         raise HTTPException( status_code = 400, detail = 'Email or Password incorrect' )
     
     #   Hash password
-    password_hash, _ = hash_password( login.password, user['salt'] )
+    password_hash, _ = hash_password( signin.password, user['salt'] )
 
     #   Check if password is correct
     if password_hash != user['password_hash']:
