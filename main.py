@@ -98,6 +98,23 @@ def hash_password( password, salt = None ):
 def read_root():
     return { 'details' : f'Hello, this is EventBud API. Please go to {MY_VARIABLE} {user} for more details.' }
 
+#   Get All Events
+@app.get('/event')
+def get_all_event():
+    '''
+        Get all events
+        Input: None
+        Output: events (list)
+    '''
+
+    #   Connect to MongoDB
+    collection = db['Events']
+
+    #   Get all events
+    events = list( collection.find( {}, { '_id' : 0 } ) )
+
+    return events
+
 #   Get Event Details
 @app.get('/event/{eventId}')
 def get_event( eventId: str ):
