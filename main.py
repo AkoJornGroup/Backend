@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from pymongo import MongoClient
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+from typing import List, Dict
 import requests
 import os
 import hashlib, uuid
@@ -41,17 +42,31 @@ class Ticket( BaseModel ):
     price: int
     amount: int
 
+class TicketClass( BaseModel ):
+    classID: str
+    className: str
+    amountOfSeat: int
+    pricePerSeat: int
+
 class Event( BaseModel ):
-    eventId: str
-    tag: str
-    name: str
-    startDate: str
-    endDate: str
-    featured: bool
-    info: str
+    eventID: str
+    eventName: str
+    startDateTime: str
+    endDateTime: str
+    onSaleDateTime: str
+    endSaleDateTime: str
     location: str
-    tickets: list[Ticket]
-    imageUrl: str
+    info: str
+    featured: bool
+    eventStatus: str
+    tagName: List[str]
+    posterImage: str
+    seatImage: List[str]
+    organizationName: str
+    staff: List[str]
+    ticket: Dict[str, bool]
+    ticketType: str
+    ticketClass: List[TicketClass]
 
 class Register( BaseModel ):
     email: str
@@ -99,7 +114,7 @@ def read_root():
     return { 'details' : f'Hello, this is EventBud API. Please go to {MY_VARIABLE} {user} for more details.' }
 
 #   Get All Events
-@app.get('/event')
+@app.get('/event', tags=['Events'])
 def get_all_event():
     '''
         Get all events
@@ -116,10 +131,10 @@ def get_all_event():
     return events
 
 #   Get Event Details
-@app.get('/event/{eventId}')
-def get_event( eventId: str ):
-    ''' Get event details by eventId
-        Input: eventId (str)
+@app.get('/event/{eventID}', tags=['Events'])
+def get_event( eventID: str ):
+    ''' Get event details by eventID
+        Input: eventID (str)
         Output: event (dict)
     '''
 
@@ -127,11 +142,11 @@ def get_event( eventId: str ):
     collection = db['Events']
 
     #   Get event details
-    event = collection.find_one( { 'eventId' : eventId }, { '_id' : 0 } )
+    event = collection.find_one( { 'eventID' : eventID }, { '_id' : 0 } )
     return event
 
 #   Sign Up
-@app.post('/signup')
+@app.post('/signup', tags=['Users'])
 def signup( register: Register ):
     ''' Sign up
         Input: register (Register)
@@ -161,7 +176,7 @@ def signup( register: Register ):
     return { 'result' : 'success' }
 
 #   Signin
-@app.post('/signin')
+@app.post('/signin', tags=['Users'])
 def signin( signin: Signin ):
     '''
         Signin
