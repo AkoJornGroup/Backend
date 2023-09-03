@@ -157,7 +157,7 @@ def signup( register: Register ):
     collection = db['User']
 
     #   Check if email already exists
-    if collection.find_one( { 'email' : register.email } ):
+    if collection.find_one( { 'email' : register.email }, { '_id' : 0 } ):
         raise HTTPException( status_code = 400, detail = 'Email already exists.' )
     
     #   Hash password
@@ -181,14 +181,14 @@ def signin( signin: Signin ):
     '''
         Signin
         Input: signin (Signin)
-        Output: result (dict)
+        Output: userInfo (dict)
     '''
 
     #   Connect to MongoDB
     collection = db['User']
 
     #   Check if email exists
-    user = collection.find_one( { 'email' : signin.email } )
+    user = collection.find_one( { 'email' : signin.email }, { '_id' : 0 } )
     if not user:
         raise HTTPException( status_code = 400, detail = 'Email or Password incorrect' )
     
@@ -199,4 +199,10 @@ def signin( signin: Signin ):
     if password_hash != user['password_hash']:
         raise HTTPException( status_code = 400, detail = 'Email or Password incorrect' )
     
-    return { 'result' : 'success' }
+    userInfo = {
+        # 'id' : user['_id'],
+        'email' : user['email'],
+        'firstName' : user['firstName']
+    }
+    
+    return userInfo
