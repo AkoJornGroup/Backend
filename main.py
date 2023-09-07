@@ -101,7 +101,7 @@ def hash_password( password, salt = None ):
         salt = uuid.uuid4().hex
     password_salt = ( password + salt ).encode( 'utf-8' )
     password_hash = hashlib.sha512( password_salt ).hexdigest()
-    return password_hash, password_salt
+    return password_hash, salt
 
 ##############################################################
 #
