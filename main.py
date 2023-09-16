@@ -68,23 +68,43 @@ class Event( BaseModel ):
     ticketType: str
     ticketClass: List[TicketClass]
 
-class Register( BaseModel ):
-    email: str
-    password: str
-    firstName: str
-    lastName: str
-
 class User( BaseModel ):
+    userID: str
     email: str
     firstName: str
     lastName: str
     password_hash: str
     salt: str
+    event: List[str]
+    telephoneNumber: str
 
-class Signin( BaseModel ):
+class User_Signup( BaseModel ):
     email: str
     password: str
-    
+    firstName: str
+    lastName: str
+
+class User_Signin( BaseModel ):
+    email: str
+    password: str
+
+class EventOrganizer( BaseModel ):
+    organizerID: str
+    email: str
+    organizerName: str
+    organizerPhone: str
+    password_hash: str
+    salt: str
+
+class EO_Signup( BaseModel ):
+    email: str
+    password: str
+    organizerName: str
+    organizerPhone: str
+
+class EO_Signin( BaseModel ):
+    email: str
+    password: str
 
 ##############################################################
 #
@@ -102,6 +122,40 @@ def hash_password( password, salt = None ):
     password_salt = ( password + salt ).encode( 'utf-8' )
     password_hash = hashlib.sha512( password_salt ).hexdigest()
     return password_hash, salt
+
+def generate_userID( email ):
+    '''
+        Generate userID from email
+        Input: email (str)
+        Output: userID (str)
+    '''
+    userID = email.split( '@' )[0]
+    
+    #   Check if userID already exists
+    collection = db['User']
+    number = 1
+    while collection.find_one( { 'userID' : userID }, { '_id' : 0 } ):
+        userID = userID + str( number )
+        number += 1
+
+    return userID
+
+def generate_organizerID( email ):
+    '''
+        Generate organizerID from email
+        Input: email (str)
+        Output: organizerID (str)
+    '''
+    organizerID = email.split( '@' )[0]
+    
+    #   Check if organizerID already exists
+    collection = db['EventOrganizer']
+    number = 1
+    while collection.find_one( { 'organizerID' : organizerID }, { '_id' : 0 } ):
+        organizerID = organizerID + str( number )
+        number += 1
+
+    return organizerID
 
 ##############################################################
 #
@@ -133,7 +187,8 @@ def get_all_event():
 #   Get Event Details
 @app.get('/event/{eventID}', tags=['Events'])
 def get_event( eventID: str ):
-    ''' Get event details by eventID
+    ''' 
+        Get event details by eventID
         Input: eventID (str)
         Output: event (dict)
     '''
@@ -145,11 +200,12 @@ def get_event( eventID: str ):
     event = collection.find_one( { 'eventID' : eventID }, { '_id' : 0 } )
     return event
 
-#   Sign Up
+#   Normal User Sign Up
 @app.post('/signup', tags=['Users'])
-def signup( register: Register ):
-    ''' Sign up
-        Input: register (Register)
+def user_signup( user_signup: User_Signup ):
+    ''' 
+        Normal User Sign up
+        Input: user_signup (User_Signup)
         Output: result (dict)
     '''
 
@@ -157,30 +213,36 @@ def signup( register: Register ):
     collection = db['User']
 
     #   Check if email already exists
-    if collection.find_one( { 'email' : register.email }, { '_id' : 0 } ):
+    if collection.find_one( { 'email' : user_signup.email }, { '_id' : 0 } ):
         raise HTTPException( status_code = 400, detail = 'Email already exists.' )
     
+    #   Generate userID
+    genUserID = generate_userID( user_signup.email )
+
     #   Hash password
-    password_hash, password_salt = hash_password( register.password )
+    password_hash, password_salt = hash_password( user_signup.password )
     
     #   Insert user to database
     newUser = User(
-        email = register.email,
-        firstName = register.firstName,
-        lastName = register.lastName,
+        userID = genUserID,
+        email = user_signup.email,
+        firstName = user_signup.firstName,
+        lastName = user_signup.lastName,
         password_hash = password_hash,
-        salt = password_salt
+        salt = password_salt,
+        event = [],
+        telephoneNumber = '',
     )
     collection.insert_one( newUser.dict() )
     
     return { 'result' : 'success' }
 
-#   Signin
+#   Normal User Signin
 @app.post('/signin', tags=['Users'])
-def signin( signin: Signin ):
+def user_signin( user_signin: User_Signin ):
     '''
-        Signin
-        Input: signin (Signin)
+        Normal User Signin
+        Input: user_signin (User_Signin)
         Output: userInfo (dict)
     '''
 
@@ -188,21 +250,86 @@ def signin( signin: Signin ):
     collection = db['User']
 
     #   Check if email exists
-    user = collection.find_one( { 'email' : signin.email }, { '_id' : 0 } )
+    user = collection.find_one( { 'email' : user_signin.email }, { '_id' : 0 } )
     if not user:
         raise HTTPException( status_code = 400, detail = 'Email or Password incorrect' )
     
     #   Hash password
-    password_hash, _ = hash_password( signin.password, user['salt'] )
+    password_hash, _ = hash_password( user_signin.password, user['salt'] )
 
     #   Check if password is correct
     if password_hash != user['password_hash']:
         raise HTTPException( status_code = 400, detail = 'Email or Password incorrect' )
     
     userInfo = {
-        # 'id' : user['_id'],
         'email' : user['email'],
         'firstName' : user['firstName']
     }
     
     return userInfo
+
+#   Event Organizer Sign Up
+@app.post('/eo_signup', tags=['Event Organizer'])
+def eo_signup( eo_signup: EO_Signup ):
+    ''' 
+        Event Organizer Sign up
+        Input: eo_signup (EO_Signup)
+        Output: result (dict)
+    '''
+
+    #   Connect to MongoDB
+    collection = db['EventOrganizer']
+
+    #   Check if email already exists
+    if collection.find_one( { 'email' : eo_signup.email }, { '_id' : 0 } ):
+        raise HTTPException( status_code = 400, detail = 'Email already exists.' )
+    
+    #   Generate organizerID
+    genOrganizerID = generate_organizerID( eo_signup.email )
+
+    #   Hash password
+    password_hash, password_salt = hash_password( eo_signup.password )
+    
+    #   Insert user to database
+    newEO = EventOrganizer(
+        organizerID = genOrganizerID,
+        email = eo_signup.email,
+        organizerName = eo_signup.organizerName,
+        organizerPhone = eo_signup.organizerPhone,
+        password_hash = password_hash,
+        salt = password_salt,
+    )
+    collection.insert_one( newEO.dict() )
+    
+    return { 'result' : 'success' }
+
+#   Event Organizer Signin
+@app.post('/eo_signin', tags=['Event Organizer'])
+def eo_signin( eo_signin: EO_Signin ):
+    '''
+        Event Organizer Signin
+        Input: eo_signin (EO_Signin)
+        Output: eoInfo (dict)
+    '''
+
+    #   Connect to MongoDB
+    collection = db['EventOrganizer']
+
+    #   Check if email exists
+    eo = collection.find_one( { 'email' : eo_signin.email }, { '_id' : 0 } )
+    if not eo:
+        raise HTTPException( status_code = 400, detail = 'Email or Password incorrect' )
+    
+    #   Hash password
+    password_hash, _ = hash_password( eo_signin.password, eo['salt'] )
+
+    #   Check if password is correct
+    if password_hash != eo['password_hash']:
+        raise HTTPException( status_code = 400, detail = 'Email or Password incorrect' )
+    
+    eoInfo = {
+        'email' : eo['email'],
+        'organizerName' : eo['organizerName'],
+    }
+    
+    return eoInfo
