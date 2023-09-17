@@ -333,3 +333,31 @@ def eo_signin( eo_signin: EO_Signin ):
     }
     
     return eoInfo
+
+#   Get Schedule
+@app.get('/staff_event/{userID}', tags=['Staff'])
+def get_staff_event( userID: str ):
+    '''
+        Get staff events
+        Input: userID (str)
+        Output: events (list)
+    '''
+
+    #   Connect to MongoDB
+    userCollection = db['User']
+    eventCollection = db['Events']
+
+    #   Get user events
+    user = userCollection.find_one( { 'userID' : userID }, { '_id' : 0 } )
+    if not user:
+        raise HTTPException( status_code = 400, detail = 'User not found' )
+    
+    eventID = user['event']
+
+    events = []
+    for event in eventID:
+        events.append( eventCollection.find_one( { 'eventID' : event }, { '_id' : 0 } ) )
+
+    sortedEvents = sorted( events, key = lambda i: i['startDateTime'] )
+
+    return sortedEvents
