@@ -262,8 +262,9 @@ def user_signin( user_signin: User_Signin ):
         raise HTTPException( status_code = 400, detail = 'Email or Password incorrect' )
     
     userInfo = {
+        'userID' : user['userID'],
         'email' : user['email'],
-        'firstName' : user['firstName']
+        'name' : user['firstName'] + ' ' + user['lastName'],
     }
     
     return userInfo
