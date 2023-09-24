@@ -88,6 +88,13 @@ class User_Signin( BaseModel ):
     email: str
     password: str
 
+class User_Edit_Profile( BaseModel ):
+    userID: str
+    newEmail: str
+    newFirstName: str
+    newLastName: str
+    newTelephoneNumber: str
+
 class EventOrganizer( BaseModel ):
     organizerID: str
     email: str
@@ -295,6 +302,38 @@ def get_user_ticket( userID: str ):
 
     # return tickets
     return sortedTickets
+
+#   User Edit Profile
+@app.post('/update_profile', tags=['Users'])
+def user_edit_profile( user_edit_profile: User_Edit_Profile ):
+    '''
+        User Edit Profile
+        Input: user_edit_profile (User_Edit_Profile)
+        Output: result (dict)
+    '''
+
+    #   Connect to MongoDB
+    collection = db['User']
+
+    #   Check if userID exists
+    user = collection.find_one( { 'userID' : user_edit_profile.userID }, { '_id' : 0 } )
+    if not user:
+        raise HTTPException( status_code = 400, detail = 'User not found' )
+    
+    #   Check if email already exists
+    if user_edit_profile.newEmail != user['email']:
+        if collection.find_one( { 'email' : user_edit_profile.newEmail }, { '_id' : 0 } ):
+            raise HTTPException( status_code = 400, detail = 'Email already exists.' )
+    
+    #   Update user profile
+    collection.update_one( { 'userID' : user_edit_profile.userID }, { '$set' : {
+        'email' : user_edit_profile.newEmail,
+        'firstName' : user_edit_profile.newFirstName,
+        'lastName' : user_edit_profile.newLastName,
+        'telephoneNumber' : user_edit_profile.newTelephoneNumber,
+    } } )
+
+    return { 'result' : 'success' }
 
 #   Event Organizer Sign Up
 @app.post('/eo_signup', tags=['Event Organizer'])
