@@ -269,6 +269,33 @@ def user_signin( user_signin: User_Signin ):
     
     return userInfo
 
+#   Get User Ticket
+@app.get('/user_ticket/{userID}', tags=['Users'])
+def get_user_ticket( userID: str ):
+    '''
+        Get user ticket
+        Input: userID (str)
+        Output: tickets (list)
+    '''
+
+    #   Connect to MongoDB
+    user_collection = db['User']
+    ticket_collection = db['Ticket']
+
+    #   Check if userID exists
+    user = user_collection.find_one( { 'userID' : userID }, { '_id' : 0 } )
+    if not user:
+        raise HTTPException( status_code = 400, detail = 'User not found' )
+    
+    #   Get user ticket
+    tickets = list( ticket_collection.find( { 'userID' : userID }, { '_id' : 0 } ) )
+
+    #   Sort tickets by valid date
+    sortedTickets = sorted( tickets, key = lambda i: i['validDatetime'] )
+
+    # return tickets
+    return sortedTickets
+
 #   Event Organizer Sign Up
 @app.post('/eo_signup', tags=['Event Organizer'])
 def eo_signup( eo_signup: EO_Signup ):
