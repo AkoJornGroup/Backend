@@ -335,6 +335,36 @@ def eo_signin( eo_signin: EO_Signin ):
     
     return eoInfo
 
+#   Get All Events by Event Organizer
+@app.get('/eo_event/{organizerID}', tags=['Event Organizer'])
+def get_eo_event( organizerID: str ):
+    '''
+        Get all events by event organizer
+        Input: organizerID (str)
+        Output: events (list)
+    '''
+
+    #   Connect to MongoDB
+    eo_collection = db['EventOrganizer']
+    event_collection = db['Events']
+
+    #   Check if organizerID exists
+    eo = eo_collection.find_one( { 'organizerID' : organizerID }, { '_id' : 0 } )
+    if not eo:
+        raise HTTPException( status_code = 400, detail = 'Organizer not found' )
+    
+    eoName = eo['organizerName']
+
+    #   Get all events
+    events = list( event_collection.find( { 'organizerName' : eoName }, { '_id' : 0 } ) )
+
+    status_order = { 'Draft' : 0, 'On-going' : 1, 'Expired' : 2 }
+
+    #   Sort events by status
+    sortedEvents = sorted( events, key = lambda i: (status_order[i['eventStatus']], i['startDateTime']) )
+
+    return sortedEvents
+
 #   Get Schedule
 @app.get('/staff_event/{userID}', tags=['Staff'])
 def get_staff_event( userID: str ):
