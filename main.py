@@ -496,7 +496,7 @@ def get_eo_event( organizerID: str ):
     return sortedEvents
 
 #   Scan Ticket
-@app.post('/scanner/{eventID}/{ticketID}', tags=['Events'])
+@app.post('/scanner/{eventID}/{ticketID}', tags=['Staff'])
 def scan_ticket( eventID: str, ticketID: str ):
     '''
         Scan ticket
