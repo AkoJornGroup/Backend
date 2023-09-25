@@ -297,10 +297,10 @@ def get_user_ticket( userID: str ):
     #   Get user ticket
     tickets = list( ticket_collection.find( { 'userID' : userID }, { '_id' : 0 } ) )
 
-    #   Sort tickets by valid date
-    sortedTickets = sorted( tickets, key = lambda i: i['validDatetime'] )
+    #   Sort tickets by ticket status
+    status_order = { 'available' : 0, 'scanned' : 1, 'expired' : 2, 'transferred' : 3 }
+    sortedTickets = sorted( tickets, key = lambda i: (status_order[i['status']], i['validDatetime']) )
 
-    # return tickets
     return sortedTickets
 
 #   User Edit Profile
