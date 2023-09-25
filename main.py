@@ -404,6 +404,45 @@ def get_eo_event( organizerID: str ):
 
     return sortedEvents
 
+#   Scan Ticket
+@app.post('/scanner/{eventID}/{ticketID}', tags=['Events'])
+def scan_ticket( eventID: str, ticketID: str ):
+    '''
+        Scan ticket
+        Input: eventID (str), ticketID (str)
+        Output: result (dict)
+    '''
+
+    #   Connect to MongoDB
+    collection = db['Ticket']
+
+    #   Check if ticketID exists
+    ticket = collection.find_one( { 'ticketID' : ticketID }, { '_id' : 0 } )
+    if not ticket:
+        raise HTTPException( status_code = 400, detail = 'Ticket not found' )
+    
+    #   Check if wrong event
+    if ticket['eventID'] != eventID:
+        raise HTTPException( status_code = 400, detail = 'Wrong event' )
+    
+    #   Check if ticket is already scanned
+    if ticket['status'] == 'scanned':
+        raise HTTPException( status_code = 400, detail = 'Ticket already scanned' )
+    
+    #   Check if ticket is expired
+    if ticket['status'] == 'expired':
+        raise HTTPException( status_code = 400, detail = 'Ticket expired' )
+    
+    #   Check if ticket is transferred
+    if ticket['status'] == 'transferred':
+        raise HTTPException( status_code = 400, detail = 'Ticket transferred' )
+    
+    #   Update ticket status
+    if ticket['status'] == 'available':
+        collection.update_one( { 'ticketID' : ticketID }, { '$set' : { 'status' : 'scanned' } } )
+
+    return { 'result' : 'success' }
+
 #   Get Schedule
 @app.get('/staff_event/{userID}', tags=['Staff'])
 def get_staff_event( userID: str ):
