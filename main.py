@@ -340,6 +340,32 @@ def user_edit_profile( user_edit_profile: User_Edit_Profile ):
 
     return { 'result' : 'success' }
 
+#   Get User Profile
+@app.get('/profile/{userID}', tags=['Users'])
+def get_user_profile( userID: str ):
+    '''
+        Get user profile
+        Input: userID (str)
+        Output: userInfo (dict)
+    '''
+
+    #   Connect to MongoDB
+    collection = db['User']
+
+    #   Check if userID exists
+    user = collection.find_one( { 'userID' : userID }, { '_id' : 0 } )
+    if not user:
+        raise HTTPException( status_code = 400, detail = 'User not found' )
+    
+    userInfo = {
+        'email' : user['email'],
+        'firstName' : user['firstName'],
+        'lastName' : user['lastName'],
+        'telephoneNumber' : user['telephoneNumber'],
+    }
+
+    return userInfo
+
 #   Reset Password
 @app.post('/reset_password', tags=['Users'])
 def user_reset_password( user_reset_password: User_Reset_Password ):
