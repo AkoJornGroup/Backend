@@ -95,6 +95,11 @@ class User_Edit_Profile( BaseModel ):
     newLastName: str
     newTelephoneNumber: str
 
+class User_Reset_Password( BaseModel ):
+    userID: str
+    oldPassword: str
+    newPassword: str
+
 class EventOrganizer( BaseModel ):
     organizerID: str
     email: str
@@ -304,6 +309,39 @@ def user_edit_profile( user_edit_profile: User_Edit_Profile ):
         'firstName' : user_edit_profile.newFirstName,
         'lastName' : user_edit_profile.newLastName,
         'telephoneNumber' : user_edit_profile.newTelephoneNumber,
+    } } )
+
+    return { 'result' : 'success' }
+
+#   Reset Password
+@app.post('/reset_password', tags=['Users'])
+def user_reset_password( user_reset_password: User_Reset_Password ):
+    '''
+        User Reset Password
+        Input: user_reset_password (User_Reset_Password)
+        Output: result (dict)
+    '''
+
+    #   Connect to MongoDB
+    collection = db['User']
+
+    #   Check if userID exists
+    user = collection.find_one( { 'userID' : user_reset_password.userID }, { '_id' : 0 } )
+    if not user:
+        raise HTTPException( status_code = 400, detail = 'User not found' )
+    
+    #   Check if old password is incorrect
+    password_hash, _ = hash_password( user_reset_password.oldPassword, user['salt'] )
+    if password_hash != user['password_hash']:
+        raise HTTPException( status_code = 400, detail = 'Old password is incorrect' )
+
+    #   Hash password
+    password_hash, password_salt = hash_password( user_reset_password.newPassword )
+    
+    #   Update password
+    collection.update_one( { 'userID' : user_reset_password.userID }, { '$set' : {
+        'password_hash' : password_hash,
+        'salt' : password_salt,
     } } )
 
     return { 'result' : 'success' }
