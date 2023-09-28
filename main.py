@@ -495,6 +495,37 @@ def get_eo_event( organizerID: str ):
 
     return sortedEvents
 
+#   Get All Ticket Sold by Event Organizer and Event ID
+@app.get('/eo_get_all_ticket_sold/{organizerID}/{eventID}', tags=['Event Organizer'])
+def get_all_ticket_sold( organizerID: str, eventID: str ):
+    '''
+        Get all tickets sold by event organizer and eventID
+        Input: organizerID (str), eventID (str)
+        Output: tickets (list)
+    '''
+
+    #   Connect to MongoDB
+    eo_collection = db['EventOrganizer']
+    event_collection = db['Events']
+
+    #   Check if organizerID exists
+    eo = eo_collection.find_one( { 'organizerID' : organizerID }, { '_id' : 0 } )
+    if not eo:
+        raise HTTPException( status_code = 400, detail = 'Organizer not found' )
+    
+    #   Check if eventID exists
+    event = event_collection.find_one( { 'eventID' : eventID }, { '_id' : 0 } )
+    if not event or event['organizerName'] != eo['organizerName']:
+        raise HTTPException( status_code = 400, detail = 'Event not found' )
+    
+    returnDict = {
+        'totalRevenue' : event['totalRevenue'],
+        'ticketSold' : event['soldTicket'],
+        'ticketLeft' : event['totalTicket']
+    }
+
+    return returnDict
+
 #   Scan Ticket
 @app.post('/scanner/{eventID}/{ticketID}', tags=['Staff'])
 def scan_ticket( eventID: str, ticketID: str ):
