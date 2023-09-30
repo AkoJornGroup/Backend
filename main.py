@@ -7,6 +7,7 @@ from typing import List, Dict
 import requests
 import os
 import hashlib, uuid
+import datetime
 
 app = FastAPI()
 
@@ -38,15 +39,26 @@ app.add_middleware(
 #
 
 class Ticket( BaseModel ):
-    ticketName: str
-    price: int
-    amount: int
+    ticketID : str
+    validDatetime : datetime.datetime
+    expiredDatetime : datetime.datetime
+    status : str
+    seatNo : str
+    className : str
+    eventID : str
+    userID : str
 
 class TicketClass( BaseModel ):
     classID: str
     className: str
     amountOfSeat: int
     pricePerSeat: int
+
+class NewTicket( BaseModel ):
+    eventID: str
+    userID: str
+    className: str
+    seatNo: List[str]   #   List of blank string if no seat
 
 class Event( BaseModel ):
     eventID: str
@@ -168,6 +180,15 @@ def generate_organizerID( email ):
         number += 1
 
     return organizerID
+
+def generate_ticketID( eventID, userID, classID, seatNo ):
+    '''
+        Generate ticketID from eventID, userID, classID, and seatNo
+        Input: eventID (str), userID (str), classID (str), seatNo (str)
+        Output: ticketID (str)
+    '''
+    ticketID = eventID + userID + classID + seatNo
+    return ticketID
 
 ##############################################################
 #
@@ -395,6 +416,98 @@ def user_reset_password( user_reset_password: User_Reset_Password ):
     collection.update_one( { 'userID' : user_reset_password.userID }, { '$set' : {
         'password_hash' : password_hash,
         'salt' : password_salt,
+    } } )
+
+    return { 'result' : 'success' }
+
+#   Post New Ticket
+@app.post('/post_ticket', tags=['Users'])
+def post_new_ticket( new_ticket: NewTicket ):
+    '''
+        Post new ticket
+        Input: new_ticket (NewTicket)
+        Output: result (dict)
+    '''
+
+    #   Connect to MongoDB
+    user_collection = db['User']
+    event_collection = db['Events']
+    ticket_collection = db['Ticket']
+
+    #   Check if userID exists
+    user = user_collection.find_one( { 'userID' : new_ticket.userID }, { '_id' : 0 } )
+    if not user:
+        raise HTTPException( status_code = 400, detail = 'User not found' )
+    
+    #   Check if eventID exists
+    event = event_collection.find_one( { 'eventID' : new_ticket.eventID }, { '_id' : 0 } )
+    if not event:
+        raise HTTPException( status_code = 400, detail = 'Event not found' )
+    
+    #   Check if ticket amount is enough
+    #       Loop find ticketClass
+    for ticketClass in event['zoneRevenue']:
+        if ticketClass['className'] == new_ticket.className:
+            if ticketClass['ticketSold'] + len( new_ticket.seatNo ) > ticketClass['quota']:
+                raise HTTPException( status_code = 400, detail = 'Ticket amount is not enough' )
+            break
+
+    #   Check if seatNo is already taken
+    #       Loop find ticketClass
+    if new_ticket.seatNo[0] != '':
+        for ticketClass in event['ticketClass']:
+            if ticketClass['className'] == new_ticket.className:
+                for seatNo in new_ticket.seatNo:
+                    if ticketClass['seatNo'][seatNo] != 'vacant':
+                        raise HTTPException( status_code = 400, detail = f'{seatNo} Seat already taken' )
+                break
+    
+    #   Loop for each seatNo
+    for seatNo in new_ticket.seatNo:
+
+        #   Generate ticketID
+        ticketID = generate_ticketID( new_ticket.eventID, new_ticket.userID, new_ticket.className, seatNo )
+
+        #   Insert ticket to database
+        newTicket = Ticket(
+            ticketID = ticketID,
+            validDatetime = event['startDateTime'],
+            expiredDatetime = event['endDateTime'],
+            status = 'available',
+            seatNo = seatNo,
+            className = new_ticket.className,
+            eventID = new_ticket.eventID,
+            userID = new_ticket.userID
+        )
+        ticket_collection.insert_one( newTicket.dict() )
+
+    #   Update Event ticketClass
+    #       Loop find ticketClass
+    for i in range( len( event['ticketClass'] ) ):
+        ticketClass = event['ticketClass'][i]
+        if ticketClass['className'] == new_ticket.className:
+            for seatNo in new_ticket.seatNo:
+                event_collection.update_one( { 'eventID' : new_ticket.eventID }, { '$set' : {
+                    f'ticketClass.{i}.seatNo.{seatNo}' : 'available'
+                } } )
+            break
+
+    #   Update ticket amount
+    #       Loop find ticketClass
+    totalPrice = 0
+    for i in range( len( event['zoneRevenue'] ) ):
+        ticketClass = event['zoneRevenue'][i]
+        if ticketClass['className'] == new_ticket.className:
+            event['zoneRevenue'][i]['ticketSold'] += len( new_ticket.seatNo )
+            totalPrice = len( new_ticket.seatNo ) * ticketClass['price']
+            break
+
+    #   Update event ticket
+    event_collection.update_one( { 'eventID' : new_ticket.eventID }, { '$set' : {
+        'totalTicket' : event['totalTicket'] - len( new_ticket.seatNo ),
+        'soldTicket' : event['soldTicket'] + len( new_ticket.seatNo ),
+        'zoneRevenue' : event['zoneRevenue'],
+        'totalRevenue' : event['totalRevenue'] + totalPrice
     } } )
 
     return { 'result' : 'success' }
