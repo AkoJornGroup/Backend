@@ -188,6 +188,15 @@ def generate_ticketID( eventID, userID, classID, seatNo ):
         Output: ticketID (str)
     '''
     ticketID = eventID + userID + classID + seatNo
+    
+    #   Check if ticketID already exists
+    collection = db['Ticket']
+    number = 1
+    copyTicketID = ticketID
+    while collection.find_one( { 'ticketID' : ticketID }, { '_id' : 0 } ):
+        ticketID = copyTicketID + str( number )
+        number += 1
+
     return ticketID
 
 ##############################################################
@@ -443,6 +452,17 @@ def post_new_ticket( new_ticket: NewTicket ):
     event = event_collection.find_one( { 'eventID' : new_ticket.eventID }, { '_id' : 0 } )
     if not event:
         raise HTTPException( status_code = 400, detail = 'Event not found' )
+
+    #   Check if wrong ticket class
+    for i in range( len( event['ticketClass'] ) ):
+        if event['ticketClass'][i]['className'] == new_ticket.className:
+            break
+        if i == len( event['ticketClass'] ) - 1:
+            raise HTTPException( status_code = 400, detail = 'Wrong ticket class' )
+        
+    #   Check if no seatNo
+    if len( new_ticket.seatNo ) == 0:
+        raise HTTPException( status_code = 400, detail = 'Please select seat' )
     
     #   Check if ticket amount is enough
     #       Loop find ticketClass
@@ -452,12 +472,14 @@ def post_new_ticket( new_ticket: NewTicket ):
                 raise HTTPException( status_code = 400, detail = 'Ticket amount is not enough' )
             break
 
-    #   Check if seatNo is already taken
+    #   Check if seatNo is already taken or wrong seatNo
     #       Loop find ticketClass
     if new_ticket.seatNo[0] != '':
         for ticketClass in event['ticketClass']:
             if ticketClass['className'] == new_ticket.className:
                 for seatNo in new_ticket.seatNo:
+                    if seatNo not in ticketClass['seatNo']:
+                        raise HTTPException( status_code = 400, detail = f'{seatNo} Seat not found' )
                     if ticketClass['seatNo'][seatNo] != 'vacant':
                         raise HTTPException( status_code = 400, detail = f'{seatNo} Seat already taken' )
                 break
@@ -485,7 +507,7 @@ def post_new_ticket( new_ticket: NewTicket ):
     #       Loop find ticketClass
     for i in range( len( event['ticketClass'] ) ):
         ticketClass = event['ticketClass'][i]
-        if ticketClass['className'] == new_ticket.className:
+        if ticketClass['className'] == new_ticket.className and new_ticket.seatNo[0] != '':
             for seatNo in new_ticket.seatNo:
                 event_collection.update_one( { 'eventID' : new_ticket.eventID }, { '$set' : {
                     f'ticketClass.{i}.seatNo.{seatNo}' : 'available'
@@ -504,7 +526,6 @@ def post_new_ticket( new_ticket: NewTicket ):
 
     #   Update event ticket
     event_collection.update_one( { 'eventID' : new_ticket.eventID }, { '$set' : {
-        'totalTicket' : event['totalTicket'] - len( new_ticket.seatNo ),
         'soldTicket' : event['soldTicket'] + len( new_ticket.seatNo ),
         'zoneRevenue' : event['zoneRevenue'],
         'totalRevenue' : event['totalRevenue'] + totalPrice
@@ -634,7 +655,7 @@ def get_all_ticket_sold( organizerID: str, eventID: str ):
     returnDict = {
         'totalRevenue' : event['totalRevenue'],
         'ticketSold' : event['soldTicket'],
-        'ticketLeft' : event['totalTicket']
+        'ticketLeft' : event['totalTicket'] - event['soldTicket'],
     }
 
     return returnDict
