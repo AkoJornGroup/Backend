@@ -47,6 +47,8 @@ class Ticket( BaseModel ):
     className : str
     eventID : str
     userID : str
+    eventName : str
+    eventImage : str
 
 class TicketClass( BaseModel ):
     classID: str
@@ -499,7 +501,9 @@ def post_new_ticket( new_ticket: NewTicket ):
             seatNo = seatNo,
             className = new_ticket.className,
             eventID = new_ticket.eventID,
-            userID = new_ticket.userID
+            userID = new_ticket.userID,
+            eventName = event['eventName'],
+            eventImage = event['posterImage']
         )
         ticket_collection.insert_one( newTicket.dict() )
 
@@ -686,7 +690,7 @@ def get_all_staff( organizerID: str, eventID: str ):
     
     staffs = []
     for staff in event['staff']:
-        user = user_collection.find_one( { 'email' : staff }, { '_id' : 0 } )
+        user = user_collection.find_one( { 'userID' : staff }, { '_id' : 0 } )
         staffs.append( user )
 
     return staffs
@@ -721,11 +725,11 @@ def add_staff( organizerID: str, eventID: str, staffEmail: str ):
         raise HTTPException( status_code = 400, detail = 'Staff not found' )
     
     #   Check if staff already in event
-    if staffEmail in event['staff']:
+    if user['userID'] in event['staff']:
         raise HTTPException( status_code = 400, detail = 'Staff already in event' )
     
     #   Add staff to event
-    event_collection.update_one( { 'eventID' : eventID }, { '$push' : { 'staff' : staffEmail } } )
+    event_collection.update_one( { 'eventID' : eventID }, { '$push' : { 'staff' : user['userID'] } } )
 
     #   Add event to staff
     user_collection.update_one( { 'email' : staffEmail }, { '$push' : { 'event' : eventID } } )
@@ -762,11 +766,11 @@ def remove_staff( organizerID: str, eventID: str, staffEmail: str ):
         raise HTTPException( status_code = 400, detail = 'Staff not found' )
     
     #   Check if staff not in event
-    if staffEmail not in event['staff']:
+    if user['userID'] not in event['staff']:
         raise HTTPException( status_code = 400, detail = 'Staff not in event' )
     
     #   Remove staff from event
-    event_collection.update_one( { 'eventID' : eventID }, { '$pull' : { 'staff' : staffEmail } } )
+    event_collection.update_one( { 'eventID' : eventID }, { '$pull' : { 'staff' : user['userID'] } } )
 
     #   Remove event from staff
     user_collection.update_one( { 'email' : staffEmail }, { '$pull' : { 'event' : eventID } } )
