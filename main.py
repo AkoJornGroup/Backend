@@ -526,6 +526,116 @@ def get_all_ticket_sold( organizerID: str, eventID: str ):
 
     return returnDict
 
+#   Get All Staff by Event Organizer and Event ID
+@app.get('/eo_get_all_staff/{organizerID}/{eventID}', tags=['Event Organizer'])
+def get_all_staff( organizerID: str, eventID: str ):
+    '''
+        Get all staff by event organizer and eventID
+        Input: organizerID (str), eventID (str)
+        Output: staffs (list)
+    '''
+
+    #   Connect to MongoDB
+    eo_collection = db['EventOrganizer']
+    event_collection = db['Events']
+    user_collection = db['User']
+
+    #   Check if organizerID exists
+    eo = eo_collection.find_one( { 'organizerID' : organizerID }, { '_id' : 0 } )
+    if not eo:
+        raise HTTPException( status_code = 400, detail = 'Organizer not found' )
+    
+    #   Check if eventID exists
+    event = event_collection.find_one( { 'eventID' : eventID }, { '_id' : 0 } )
+    if not event or event['organizerName'] != eo['organizerName']:
+        raise HTTPException( status_code = 400, detail = 'Event not found' )
+    
+    staffs = []
+    for staff in event['staff']:
+        user = user_collection.find_one( { 'userID' : staff }, { '_id' : 0 } )
+        staffs.append( user )
+
+    return staffs
+
+#   Add Staff to Event by Event Organizer and Event ID
+@app.post('/eo_add_staff/{organizerID}/{eventID}/{staffID}', tags=['Event Organizer'])
+def add_staff( organizerID: str, eventID: str, staffID: str ):
+    '''
+        Add staff to event by event organizer and eventID
+        Input: organizerID (str), eventID (str), staffID (str)
+        Output: result (dict)
+    '''
+
+    #   Connect to MongoDB
+    eo_collection = db['EventOrganizer']
+    event_collection = db['Events']
+    user_collection = db['User']
+
+    #   Check if organizerID exists
+    eo = eo_collection.find_one( { 'organizerID' : organizerID }, { '_id' : 0 } )
+    if not eo:
+        raise HTTPException( status_code = 400, detail = 'Organizer not found' )
+    
+    #   Check if eventID exists
+    event = event_collection.find_one( { 'eventID' : eventID }, { '_id' : 0 } )
+    if not event or event['organizerName'] != eo['organizerName']:
+        raise HTTPException( status_code = 400, detail = 'Event not found' )
+    
+    #   Check if staffID exists
+    user = user_collection.find_one( { 'userID' : staffID }, { '_id' : 0 } )
+    if not user:
+        raise HTTPException( status_code = 400, detail = 'Staff not found' )
+    
+    #   Check if staff already in event
+    if staffID in event['staff']:
+        raise HTTPException( status_code = 400, detail = 'Staff already in event' )
+    
+    #   Add staff to event
+    event_collection.update_one( { 'eventID' : eventID }, { '$push' : { 'staff' : staffID } } )
+
+    #   Add event to staff
+    user_collection.update_one( { 'userID' : staffID }, { '$push' : { 'event' : eventID } } )
+
+    return { 'result' : 'success' }
+
+#   Remove Staff from Event by Event Organizer and Event ID
+@app.post('/eo_remove_staff/{organizerID}/{eventID}/{staffID}', tags=['Event Organizer'])
+def remove_staff( organizerID: str, eventID: str, staffID: str ):
+    '''
+        Remove staff from event by event organizer and eventID
+        Input: organizerID (str), eventID (str), staffID (str)
+        Output: result (dict)
+    '''
+
+    #   Connect to MongoDB
+    eo_collection = db['EventOrganizer']
+    event_collection = db['Events']
+    user_collection = db['User']
+
+    #   Check if organizerID exists
+    eo = eo_collection.find_one( { 'organizerID' : organizerID }, { '_id' : 0 } )
+    if not eo:
+        raise HTTPException( status_code = 400, detail = 'Organizer not found' )
+    
+    #   Check if eventID exists
+    event = event_collection.find_one( { 'eventID' : eventID }, { '_id' : 0 } )
+    if not event or event['organizerName'] != eo['organizerName']:
+        raise HTTPException( status_code = 400, detail = 'Event not found' )
+    
+    #   Check if staffID exists
+    user = user_collection.find_one( { 'userID' : staffID }, { '_id' : 0 } )
+    if not user:
+        raise HTTPException( status_code = 400, detail = 'Staff not found' )
+    
+    #   Check if staff not in event
+    if staffID not in event['staff']:
+        raise HTTPException( status_code = 400, detail = 'Staff not in event' )
+    
+    #   Remove staff from event
+    event_collection.update_one( { 'eventID' : eventID }, { '$pull' : { 'staff' : staffID } } )
+
+    return { 'result' : 'success' }
+
 #   Scan Ticket
 @app.post('/scanner/{eventID}/{ticketID}', tags=['Staff'])
 def scan_ticket( eventID: str, ticketID: str ):
