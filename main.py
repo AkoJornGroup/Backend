@@ -49,12 +49,15 @@ class Ticket( BaseModel ):
     userID : str
     eventName : str
     eventImage : str
+    location : str
 
 class TicketClass( BaseModel ):
-    classID: str
     className: str
     amountOfSeat: int
     pricePerSeat: int
+    rowNo: int
+    columnNo: int
+    seatNo: Dict[str, str]    #   Dict of seatNo and status
 
 class NewTicket( BaseModel ):
     eventID: str
@@ -62,13 +65,26 @@ class NewTicket( BaseModel ):
     className: str
     seatNo: List[str]   #   List of blank string if no seat
 
+class ZoneRevenue( BaseModel ):
+    className: str
+    price: int
+    ticketSold: int
+    quota: int
+
+class BankAccount( BaseModel ):
+    bank: str
+    accountName: str
+    accountType: str
+    accountNo: str
+    branch: str
+
 class Event( BaseModel ):
     eventID: str
     eventName: str
-    startDateTime: str
-    endDateTime: str
-    onSaleDateTime: str
-    endSaleDateTime: str
+    startDateTime: datetime.datetime
+    endDateTime: datetime.datetime
+    onSaleDateTime: datetime.datetime
+    endSaleDateTime: datetime.datetime
     location: str
     info: str
     featured: bool
@@ -76,11 +92,17 @@ class Event( BaseModel ):
     tagName: List[str]
     posterImage: str
     seatImage: List[str]
-    organizationName: str
     staff: List[str]
-    ticket: Dict[str, bool]
     ticketType: str
     ticketClass: List[TicketClass]
+    organizerName: str
+    timeStamp: datetime.datetime
+    totalTicket: int
+    soldTicket: int
+    totalTicketValue: int
+    totalRevenue: int
+    zoneRevenue: List[ZoneRevenue]
+    bankAccount: BankAccount
 
 class User( BaseModel ):
     userID: str
@@ -200,6 +222,26 @@ def generate_ticketID( eventID, userID, classID, seatNo ):
         number += 1
 
     return ticketID
+
+def generate_eventID():
+    '''
+        Generate eventID
+        Input: None
+        Output: eventID (str)
+    '''
+    #   Connect to MongoDB
+    collection = db['Events']
+
+    #   Generate eventID
+    eventID = 'EV' + str( collection.count_documents( {} ) + 1 ).zfill( 5 )
+
+    number = 2
+    #   Check if eventID already exists
+    while collection.find_one( { 'eventID' : eventID }, { '_id' : 0 } ):
+        eventID = 'EV' + str( collection.count_documents( {} ) + number ).zfill( 5 )
+        number += 1
+
+    return eventID
 
 ##############################################################
 #
@@ -503,7 +545,8 @@ def post_new_ticket( new_ticket: NewTicket ):
             eventID = new_ticket.eventID,
             userID = new_ticket.userID,
             eventName = event['eventName'],
-            eventImage = event['posterImage']
+            eventImage = event['posterImage'],
+            location = event['location']
         )
         ticket_collection.insert_one( newTicket.dict() )
 
@@ -664,6 +707,93 @@ def get_all_ticket_sold( organizerID: str, eventID: str ):
 
     return returnDict
 
+#   Post Create Event by Event Organizer
+@app.post('/eo_create_event/{organizerID}', tags=['Event Organizer'])
+def post_create_event( organizerID: str ):
+    '''
+        Post create event by event organizer
+        Input: organizerID (str)
+        Output: result (dict)
+    '''
+
+    #   Connect to MongoDB
+    eo_collection = db['EventOrganizer']
+    event_collection = db['Events']
+
+    #   Check if organizerID exists
+    eo = eo_collection.find_one( { 'organizerID' : organizerID }, { '_id' : 0 } )
+    if not eo:
+        raise HTTPException( status_code = 400, detail = 'Organizer not found' )
+
+    #   Generate eventID
+    eventID = generate_eventID()
+
+    #   Insert event to database
+    newEvent = Event(
+        eventID = eventID,
+        eventName = '',
+        startDateTime = datetime.datetime.now(),
+        endDateTime = datetime.datetime.now(),
+        onSaleDateTime = datetime.datetime.now(),
+        endSaleDateTime = datetime.datetime.now(),
+        location = '',
+        info = '',
+        featured = False,
+        eventStatus = 'Draft',
+        tagName = [],
+        posterImage = '',
+        seatImage = [],
+        organizationName = eo['organizerName'],
+        staff = [],
+        ticketType = '',
+        ticketClass = [],
+        organizerName = eo['organizerName'],
+        timeStamp = datetime.datetime.now(),
+        totalTicket = 0,
+        soldTicket = 0,
+        totalTicketValue = 0,
+        totalRevenue = 0,
+        zoneRevenue = [],
+        bankAccount = BankAccount(
+            bank = '',
+            accountName = '',
+            accountType = '',
+            accountNo = '',
+            branch = ''
+        )
+    )
+    event_collection.insert_one( newEvent.dict() )
+
+    return { 'result' : 'success' }
+
+#   Delete Event by Event Organizer and Event ID
+@app.delete('/eo_delete_event/{organizerID}/{eventID}', tags=['Event Organizer'])
+def delete_event( organizerID: str, eventID: str ):
+    '''
+        Delete event by event organizer and eventID
+        Input: organizerID (str), eventID (str)
+        Output: result (dict)
+    '''
+
+    #   Connect to MongoDB
+    eo_collection = db['EventOrganizer']
+    event_collection = db['Events']
+
+    #   Check if organizerID exists
+    eo = eo_collection.find_one( { 'organizerID' : organizerID }, { '_id' : 0 } )
+    if not eo:
+        raise HTTPException( status_code = 400, detail = 'Organizer not found' )
+    
+    #   Check if eventID exists
+    event = event_collection.find_one( { 'eventID' : eventID }, { '_id' : 0 } )
+    if not event or event['organizerName'] != eo['organizerName']:
+        raise HTTPException( status_code = 400, detail = 'Event not found' )
+    
+    #   Delete event
+    event_collection.delete_one( { 'eventID' : eventID } )
+
+    return { 'result' : 'success' }
+
 #   Get All Staff by Event Organizer and Event ID
 @app.get('/eo_get_all_staff/{organizerID}/{eventID}', tags=['Event Organizer'])
 def get_all_staff( organizerID: str, eventID: str ):
@@ -814,7 +944,7 @@ def scan_ticket( eventID: str, ticketID: str ):
     if ticket['status'] == 'available':
         collection.update_one( { 'ticketID' : ticketID }, { '$set' : { 'status' : 'scanned' } } )
 
-    return { 'result' : 'success' }
+    return ticket
 
 #   Get Schedule
 @app.get('/staff_event/{userID}', tags=['Staff'])
