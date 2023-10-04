@@ -51,13 +51,20 @@ class Ticket( BaseModel ):
     eventImage : str
     location : str
 
+class NewTicketClass( BaseModel ):
+    className: str
+    amountOfSeat: int
+    pricePerSeat: int
+    rowNo: int
+    columnNo: int
+
 class TicketClass( BaseModel ):
     className: str
     amountOfSeat: int
     pricePerSeat: int
     rowNo: int
     columnNo: int
-    seatNo: Dict[str, str]    #   Dict of seatNo and status
+    seatNo: Dict[str, str]  #   seatNo: status
 
 class NewTicket( BaseModel ):
     eventID: str
@@ -640,8 +647,9 @@ def eo_signin( eo_signin: EO_Signin ):
         raise HTTPException( status_code = 400, detail = 'Email or Password incorrect' )
     
     eoInfo = {
+        'organizerID' : eo['organizerID'],
         'email' : eo['email'],
-        'organizerName' : eo['organizerName'],
+        'name' : eo['organizerName'],
     }
     
     return eoInfo
@@ -791,6 +799,105 @@ def delete_event( organizerID: str, eventID: str ):
     
     #   Delete event
     event_collection.delete_one( { 'eventID' : eventID } )
+
+    return { 'result' : 'success' }
+
+#   Post Create New Ticket Type by Event Organizer and Event ID
+@app.post('/eo_create_ticket_type/{organizerID}/{eventID}', tags=['Event Organizer'])
+def post_create_ticket_type( organizerID: str, eventID: str, ticketType: NewTicketClass ):
+    '''
+        Post create new ticket type by event organizer and eventID
+        Input: organizerID (str), eventID (str)
+        Output: result (dict)
+    '''
+
+    #   Connect to MongoDB
+    eo_collection = db['EventOrganizer']
+    event_collection = db['Events']
+
+    #   Check if organizerID exists
+    eo = eo_collection.find_one( { 'organizerID' : organizerID }, { '_id' : 0 } )
+    if not eo:
+        raise HTTPException( status_code = 400, detail = 'Organizer not found' )
+    
+    #   Check if eventID exists
+    event = event_collection.find_one( { 'eventID' : eventID }, { '_id' : 0 } )
+    if not event or event['organizerName'] != eo['organizerName']:
+        raise HTTPException( status_code = 400, detail = 'Event not found' )
+    
+    #   Check if ticketType already exists
+    for ticketClass in event['ticketClass']:
+        if ticketClass['className'] == ticketType.className:
+            raise HTTPException( status_code = 400, detail = 'Ticket type already exists' )
+        
+    #   Check if ticketType is empty
+    if ticketType.amountOfSeat == 0:
+        raise HTTPException( status_code = 400, detail = 'Ticket type is empty' )
+    
+    #   Check if ticketType is negative
+    if ticketType.amountOfSeat < 0 or ticketType.pricePerSeat < 0:
+        raise HTTPException( status_code = 400, detail = 'Ticket type is negative' )
+    
+    #   Create seatNo
+    seatNo = {}
+    for i in range( ticketType.rowNo ):
+        for j in range( ticketType.columnNo ):
+            seatNo[f'{i+1}-{j+1}'] = 'vacant'
+    
+    #   Create ticketClass
+    ticketType = TicketClass(
+        className = ticketType.className,
+        pricePerSeat = ticketType.pricePerSeat,
+        amountOfSeat = ticketType.amountOfSeat,
+        rowNo = ticketType.rowNo,
+        columnNo = ticketType.columnNo,
+        seatNo = seatNo
+    )
+
+    #   Insert ticketType to database
+    event_collection.update_one( { 'eventID' : eventID }, { '$push' : { 'ticketClass' : ticketType.dict() } } )
+    event_collection.update_one( { 'eventID' : eventID }, { '$push' : { 'zoneRevenue' : ZoneRevenue(
+        className = ticketType.className,
+        price = ticketType.pricePerSeat,
+        ticketSold = 0,
+        quota = ticketType.amountOfSeat,
+    ).dict() } } )
+
+    return { 'result' : 'success' }
+
+#   Delete Ticket Type by Event Organizer and Event ID
+@app.post('/eo_delete_ticket_type/{organizerID}/{eventID}/{className}', tags=['Event Organizer'])
+def delete_ticket_type( organizerID: str, eventID: str, className: str ):
+    '''
+        Delete ticket type by event organizer and eventID
+        Input: organizerID (str), eventID (str), className (str)
+        Output: result (dict)
+    '''
+
+    #   Connect to MongoDB
+    eo_collection = db['EventOrganizer']
+    event_collection = db['Events']
+
+    #   Check if organizerID exists
+    eo = eo_collection.find_one( { 'organizerID' : organizerID }, { '_id' : 0 } )
+    if not eo:
+        raise HTTPException( status_code = 400, detail = 'Organizer not found' )
+    
+    #   Check if eventID exists
+    event = event_collection.find_one( { 'eventID' : eventID }, { '_id' : 0 } )
+    if not event or event['organizerName'] != eo['organizerName']:
+        raise HTTPException( status_code = 400, detail = 'Event not found' )
+    
+    #   Check if className exists
+    for ticketClass in event['ticketClass']:
+        if ticketClass['className'] == className:
+            break
+        if ticketClass['className'] == event['ticketClass'][-1]['className']:
+            raise HTTPException( status_code = 400, detail = 'Ticket type not found' )
+        
+    #   Delete ticketType
+    event_collection.update_one( { 'eventID' : eventID }, { '$pull' : { 'ticketClass' : { 'className' : className } } } )
+    event_collection.update_one( { 'eventID' : eventID }, { '$pull' : { 'zoneRevenue' : { 'className' : className } } } )
 
     return { 'result' : 'success' }
 
