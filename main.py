@@ -685,32 +685,26 @@ def get_eo_event( organizerID: str ):
     return sortedEvents
 
 #   Get All Ticket Sold by Event Organizer and Event ID
-@app.get('/eo_get_all_ticket_sold/{organizerID}/{eventID}', tags=['Event Organizer'])
-def get_all_ticket_sold( organizerID: str, eventID: str ):
+@app.get('/eo_get_all_ticket_sold/{eventID}', tags=['Event Organizer'])
+def get_all_ticket_sold( eventID: str ):
     '''
         Get all tickets sold by event organizer and eventID
-        Input: organizerID (str), eventID (str)
+        Input: eventID (str)
         Output: tickets (list)
     '''
 
     #   Connect to MongoDB
-    eo_collection = db['EventOrganizer']
     event_collection = db['Events']
-
-    #   Check if organizerID exists
-    eo = eo_collection.find_one( { 'organizerID' : organizerID }, { '_id' : 0 } )
-    if not eo:
-        raise HTTPException( status_code = 400, detail = 'Organizer not found' )
     
     #   Check if eventID exists
     event = event_collection.find_one( { 'eventID' : eventID }, { '_id' : 0 } )
-    if not event or event['organizerName'] != eo['organizerName']:
+    if not event:
         raise HTTPException( status_code = 400, detail = 'Event not found' )
     
     returnDict = {
         'totalRevenue' : event['totalRevenue'],
         'ticketSold' : event['soldTicket'],
-        'ticketLeft' : event['totalTicket'] - event['soldTicket'],
+        'ticketTotal' : event['totalTicket'],
     }
 
     return returnDict
@@ -1051,6 +1045,25 @@ def scan_ticket( eventID: str, ticketID: str ):
     if ticket['status'] == 'available':
         collection.update_one( { 'ticketID' : ticketID }, { '$set' : { 'status' : 'scanned' } } )
 
+    return ticket
+
+#   Get Ticket by Ticket ID
+@app.get('/ticket/{ticketID}', tags=['Staff'])
+def get_ticket( ticketID: str ):
+    '''
+        Get ticket by ticketID
+        Input: ticketID (str)
+        Output: ticket (dict)
+    '''
+
+    #   Connect to MongoDB
+    collection = db['Ticket']
+
+    #   Check if ticketID exists
+    ticket = collection.find_one( { 'ticketID' : ticketID }, { '_id' : 0 } )
+    if not ticket:
+        raise HTTPException( status_code = 400, detail = 'Ticket not found' )
+    
     return ticket
 
 #   Get Schedule
