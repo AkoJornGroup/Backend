@@ -110,6 +110,7 @@ class Event( BaseModel ):
     totalRevenue: int
     zoneRevenue: List[ZoneRevenue]
     bankAccount: BankAccount
+    organizerEmail: str
 
 class User( BaseModel ):
     userID: str
@@ -762,7 +763,8 @@ def post_create_event( organizerID: str ):
             accountType = '',
             accountNo = '',
             branch = ''
-        )
+        ),
+        organizerEmail = eo['email']
     )
     event_collection.insert_one( newEvent.dict() )
 
