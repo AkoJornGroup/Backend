@@ -1010,6 +1010,34 @@ def remove_staff( organizerID: str, eventID: str, staffEmail: str ):
 
     return { 'result' : 'success' }
 
+#   Post Bank Account by Event Organizer and Event ID
+@app.post('/eo_post_bank_account/{organizerID}/{eventID}', tags=['Event Organizer'])
+def post_bank_account( organizerID: str, eventID: str, bankAccount: BankAccount ):
+    '''
+        Post bank account by event organizer and eventID
+        Input: organizerID (str), eventID (str), bankAccount (BankAccount)
+        Output: result (dict)
+    '''
+
+    #   Connect to MongoDB
+    eo_collection = db['EventOrganizer']
+    event_collection = db['Events']
+
+    #   Check if organizerID exists
+    eo = eo_collection.find_one( { 'organizerID' : organizerID }, { '_id' : 0 } )
+    if not eo:
+        raise HTTPException( status_code = 400, detail = 'Organizer not found' )
+    
+    #   Check if eventID exists
+    event = event_collection.find_one( { 'eventID' : eventID }, { '_id' : 0 } )
+    if not event or event['organizerName'] != eo['organizerName']:
+        raise HTTPException( status_code = 400, detail = 'Event not found' )
+    
+    #   Update bank account
+    event_collection.update_one( { 'eventID' : eventID }, { '$set' : { 'bankAccount' : bankAccount.dict() } } )
+
+    return { 'result' : 'success' }
+
 #   Scan Ticket
 @app.post('/scanner/{eventID}/{ticketID}', tags=['Staff'])
 def scan_ticket( eventID: str, ticketID: str ):
