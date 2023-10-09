@@ -57,6 +57,8 @@ class NewTicketClass( BaseModel ):
     pricePerSeat: int
     rowNo: int
     columnNo: int
+    validDatetime: datetime.datetime
+    expiredDatetime: datetime.datetime
 
 class TicketClass( BaseModel ):
     className: str
@@ -65,6 +67,8 @@ class TicketClass( BaseModel ):
     rowNo: int
     columnNo: int
     seatNo: Dict[str, str]  #   seatNo: status
+    validDatetime: datetime.datetime
+    expiredDatetime: datetime.datetime
 
 class NewTicket( BaseModel ):
     eventID: str
@@ -161,6 +165,18 @@ class EO_Signup( BaseModel ):
 class EO_Signin( BaseModel ):
     email: str
     password: str
+
+class EventSetting( BaseModel ):
+    eventName: str
+    tagName: List[str]
+    startDateTime: datetime.datetime
+    endDateTime: datetime.datetime
+    onSaleDateTime: datetime.datetime
+    endSaleDateTime: datetime.datetime
+    info: str
+    location: str
+    posterImage: str
+    ticketType: str
 
 ##############################################################
 #
@@ -535,6 +551,16 @@ def post_new_ticket( new_ticket: NewTicket ):
                     if ticketClass['seatNo'][seatNo] != 'vacant':
                         raise HTTPException( status_code = 400, detail = f'{seatNo} Seat already taken' )
                 break
+
+    #   Get validDatetime and expiredDatetime
+    validDatetime = datetime.datetime.now()
+    expiredDatetime = datetime.datetime.now()
+    #       Loop find ticketClass
+    for ticketClass in event['ticketClass']:
+        if ticketClass['className'] == new_ticket.className:
+            validDatetime = ticketClass['validDatetime']
+            expiredDatetime = ticketClass['expiredDatetime']
+            break
     
     #   Loop for each seatNo
     for seatNo in new_ticket.seatNo:
@@ -545,8 +571,8 @@ def post_new_ticket( new_ticket: NewTicket ):
         #   Insert ticket to database
         newTicket = Ticket(
             ticketID = ticketID,
-            validDatetime = event['startDateTime'],
-            expiredDatetime = event['endDateTime'],
+            validDatetime = validDatetime,
+            expiredDatetime = expiredDatetime,
             status = 'available',
             seatNo = seatNo,
             className = new_ticket.className,
@@ -768,7 +794,7 @@ def post_create_event( organizerID: str ):
     )
     event_collection.insert_one( newEvent.dict() )
 
-    return { 'result' : 'success' }
+    return eventID
 
 #   Delete Event by Event Organizer and Event ID
 @app.delete('/eo_delete_event/{organizerID}/{eventID}', tags=['Event Organizer'])
@@ -795,6 +821,64 @@ def delete_event( organizerID: str, eventID: str ):
     
     #   Delete event
     event_collection.delete_one( { 'eventID' : eventID } )
+
+    return { 'result' : 'success' }
+
+#   Post Event Setting
+@app.post('/eo_event_setting/{organizerID}/{eventID}', tags=['Event Organizer'])
+def post_event_setting( organizerID: str, eventID: str, eventSetting: EventSetting ):
+    '''
+        Post event setting by event organizer and eventID
+        Input: organizerID (str), eventID (str), eventSetting (EventSetting)
+        Output: result (dict)
+    '''
+
+    #   Connect to MongoDB
+    eo_collection = db['EventOrganizer']
+    event_collection = db['Events']
+
+    #   Check if organizerID exists
+    eo = eo_collection.find_one( { 'organizerID' : organizerID }, { '_id' : 0 } )
+    if not eo:
+        raise HTTPException( status_code = 400, detail = 'Organizer not found' )
+    
+    #   Check if eventID exists
+    event = event_collection.find_one( { 'eventID' : eventID }, { '_id' : 0 } )
+    if not event or event['organizerName'] != eo['organizerName']:
+        raise HTTPException( status_code = 400, detail = 'Event not found' )
+    
+    #   Check if event is Draft
+    if event['eventStatus'] != 'Draft':
+        raise HTTPException( status_code = 400, detail = 'Event is not Draft' )
+    
+    #   Check if eventSetting is empty
+    for key in eventSetting.dict():
+        if key == 'tagName' and len( eventSetting.dict()[key] ) == 0:
+            raise HTTPException( status_code = 400, detail = f'{key} is empty' )
+        elif eventSetting.dict()[key] == '':
+            raise HTTPException( status_code = 400, detail = f'{key} is empty' )
+    
+    #   Check if eventSetting is wrong
+    if eventSetting.startDateTime > eventSetting.endDateTime or eventSetting.onSaleDateTime > eventSetting.endSaleDateTime:
+        raise HTTPException( status_code = 400, detail = 'Start/Onsale Time After End/Endsale Time' )
+    
+    #   Check if eventSetting is wrong
+    if eventSetting.startDateTime < eventSetting.endSaleDateTime:
+        raise HTTPException( status_code = 400, detail = 'Start Time Before Endsale Time' )
+    
+    #   Update event setting
+    event_collection.update_one( { 'eventID' : eventID }, { '$set' : {
+        'eventName' : eventSetting.eventName,
+        'startDateTime' : eventSetting.startDateTime,
+        'endDateTime' : eventSetting.endDateTime,
+        'onSaleDateTime' : eventSetting.onSaleDateTime,
+        'endSaleDateTime' : eventSetting.endSaleDateTime,
+        'location' : eventSetting.location,
+        'info' : eventSetting.info,
+        'posterImage' : eventSetting.posterImage,
+        'tagName' : eventSetting.tagName,
+        'ticketType' : eventSetting.ticketType,
+    } } )
 
     return { 'result' : 'success' }
 
@@ -834,6 +918,18 @@ def post_create_ticket_type( organizerID: str, eventID: str, ticketType: NewTick
     if ticketType.amountOfSeat < 0 or ticketType.pricePerSeat < 0:
         raise HTTPException( status_code = 400, detail = 'Ticket type is negative' )
     
+    #   Check if ticketType is wrong
+    if ticketType.rowNo * ticketType.columnNo != ticketType.amountOfSeat and ticketType.rowNo != 0 and ticketType.columnNo != 0:
+        raise HTTPException( status_code = 400, detail = 'rowNo x columnNo not equal amountOfSeat' )
+    
+    #   Check if ticketType is wrong
+    if (ticketType.rowNo == 0 or ticketType.columnNo == 0) and (ticketType.rowNo != 0 or ticketType.columnNo != 0):
+        raise HTTPException( status_code = 400, detail = 'rowNo/columnNo = 0' )
+
+    #   Check if ticketType is wrong
+    if ticketType.validDatetime > ticketType.expiredDatetime:
+        raise HTTPException( status_code = 400, detail = 'Valid Time After Expired Time' )
+    
     #   Create seatNo
     seatNo = {}
     for i in range( ticketType.rowNo ):
@@ -847,7 +943,9 @@ def post_create_ticket_type( organizerID: str, eventID: str, ticketType: NewTick
         amountOfSeat = ticketType.amountOfSeat,
         rowNo = ticketType.rowNo,
         columnNo = ticketType.columnNo,
-        seatNo = seatNo
+        seatNo = seatNo,
+        validDatetime = ticketType.validDatetime,
+        expiredDatetime = ticketType.expiredDatetime
     )
 
     #   Insert ticketType to database
