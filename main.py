@@ -863,8 +863,8 @@ def post_event_setting( organizerID: str, eventID: str, eventSetting: EventSetti
         raise HTTPException( status_code = 400, detail = 'Start/Onsale Time After End/Endsale Time' )
     
     #   Check if eventSetting is wrong
-    if eventSetting.startDateTime < eventSetting.endSaleDateTime:
-        raise HTTPException( status_code = 400, detail = 'Start Time Before Endsale Time' )
+    if eventSetting.endDateTime < eventSetting.endSaleDateTime:
+        raise HTTPException( status_code = 400, detail = 'End Time Before Endsale Time' )
     
     #   Update event setting
     event_collection.update_one( { 'eventID' : eventID }, { '$set' : {
@@ -923,8 +923,8 @@ def post_create_ticket_type( organizerID: str, eventID: str, ticketType: NewTick
         raise HTTPException( status_code = 400, detail = 'rowNo x columnNo not equal amountOfSeat' )
     
     #   Check if ticketType is wrong
-    if (ticketType.rowNo == 0 or ticketType.columnNo == 0) and (ticketType.rowNo != 0 or ticketType.columnNo != 0):
-        raise HTTPException( status_code = 400, detail = 'rowNo/columnNo = 0' )
+    if (ticketType.rowNo == 0 and ticketType.columnNo != 0) or (ticketType.rowNo != 0 and ticketType.columnNo == 0):
+        raise HTTPException( status_code = 400, detail = 'rowNo or columnNo = 0' )
 
     #   Check if ticketType is wrong
     if ticketType.validDatetime > ticketType.expiredDatetime:
