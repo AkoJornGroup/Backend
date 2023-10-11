@@ -277,20 +277,20 @@ def generate_eventID():
 def read_root():
     return { 'details' : f'Hello, this is EventBud API. Please go to {MY_VARIABLE} {user} for more details.' }
 
-#   Get All Events
+#   Get All On-going Events
 @app.get('/event', tags=['Events'])
 def get_all_event():
     '''
         Get all events
         Input: None
-        Output: events (list)
+        Output: On-going Events (list)
     '''
 
     #   Connect to MongoDB
     collection = db['Events']
 
     #   Get all events
-    events = list( collection.find( {}, { '_id' : 0 } ) )
+    events = list( collection.find( { 'eventStatus' : 'On-going' }, { '_id' : 0 } ) )
 
     return events
 
