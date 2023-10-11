@@ -614,6 +614,87 @@ def post_new_ticket( new_ticket: NewTicket ):
 
     return { 'result' : 'success' }
 
+#   Transfer Ticket to Another User by UserEmail
+@app.post('/transfer_ticket/{srcUserID}/{ticketID}/{dstUserEmail}', tags=['Users'])
+def transfer_ticket( srcUserID: str, ticketID: str, dstUserEmail: str ):
+    '''
+        Transfer ticket to another user by userEmail
+        Input: srcUserID (str), ticketID (str), dstUserEmail (str)
+        Output: result (dict)
+    '''
+
+    #   Connect to MongoDB
+    user_collection = db['User']
+    ticket_collection = db['Ticket']
+
+    #   Check if srcUserID exists
+    srcUser = user_collection.find_one( { 'userID' : srcUserID }, { '_id' : 0 } )
+    if not srcUser:
+        raise HTTPException( status_code = 400, detail = 'User not found' )
+    
+    #   Check if dstUserEmail exists
+    dstUser = user_collection.find_one( { 'email' : dstUserEmail }, { '_id' : 0 } )
+    if not dstUser:
+        raise HTTPException( status_code = 400, detail = 'User not found' )
+    
+    #   Check if ticketID exists
+    ticket = ticket_collection.find_one( { 'ticketID' : ticketID }, { '_id' : 0 } )
+    if not ticket:
+        raise HTTPException( status_code = 400, detail = 'Ticket not found' )
+    
+    #   Check if ticket belongs to srcUserID
+    if ticket['userID'] != srcUserID:
+        raise HTTPException( status_code = 400, detail = 'Ticket does not belong to you' )
+    
+    #   Check if ticket can be transferred
+    if ticket['status'] != 'available':
+        raise HTTPException( status_code = 400, detail = 'Ticket cannot be transferred' )
+    
+    #   Check if ticket is expired
+    if ticket['expiredDatetime'] < datetime.datetime.now():
+        #   Update ticket status to expired
+        ticket_collection.update_one( { 'ticketID' : ticketID }, { '$set' : {
+            'status' : 'expired'
+        } } )
+        raise HTTPException( status_code = 400, detail = 'Ticket is expired' )
+    
+    #   Create new ticket
+    newTicketID = generate_ticketID( ticket['eventID'], dstUser['userID'], ticket['className'], ticket['seatNo'] )
+    newTicket = Ticket(
+        ticketID = newTicketID,
+        validDatetime = ticket['validDatetime'],
+        expiredDatetime = ticket['expiredDatetime'],
+        status = 'available',
+        seatNo = ticket['seatNo'],
+        className = ticket['className'],
+        eventID = ticket['eventID'],
+        userID = dstUser['userID'],
+        eventName = ticket['eventName'],
+        eventImage = ticket['eventImage'],
+        location = ticket['location']
+    )
+    ticket_collection.insert_one( newTicket.dict() )
+
+    #   Update ticket status to transferred
+    ticket_collection.update_one( { 'ticketID' : ticketID }, { '$set' : {
+        'status' : 'transferred'
+    } } )
+
+    returnObj = {
+        'ticketID' : newTicketID,
+        'firstName' : dstUser['firstName'],
+        'lastName' : dstUser['lastName'],
+        'eventName' : ticket['eventName'],
+        'location' : ticket['location'],
+        'posterImage' : ticket['eventImage'],
+        'date' : ticket['validDatetime'].strftime( '%d %B %Y' ),
+        'zone' : ticket['className'],
+        'row' : ticket['seatNo'].split( '-' )[0],
+        'seat' : ticket['seatNo'].split( '-' )[-1],
+        'gate' : '-',
+    }
+    return returnObj
+
 #   Event Organizer Sign Up
 @app.post('/eo_signup', tags=['Event Organizer'])
 def eo_signup( eo_signup: EO_Signup ):
