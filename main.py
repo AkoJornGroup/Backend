@@ -993,11 +993,11 @@ def post_create_ticket_type( organizerID: str, eventID: str, ticketType: NewTick
         
     #   Check if ticketType is empty
     if ticketType.amountOfSeat == 0:
-        raise HTTPException( status_code = 400, detail = 'Ticket type is empty' )
+        raise HTTPException( status_code = 400, detail = 'Ticket quntity is empty' )
     
     #   Check if ticketType is negative
     if ticketType.amountOfSeat < 0 or ticketType.pricePerSeat < 0:
-        raise HTTPException( status_code = 400, detail = 'Ticket type is negative' )
+        raise HTTPException( status_code = 400, detail = 'Ticket quntity is negative' )
     
     #   Check if ticketType is wrong
     if ticketType.rowNo * ticketType.columnNo != ticketType.amountOfSeat and ticketType.rowNo != 0 and ticketType.columnNo != 0:
