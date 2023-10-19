@@ -306,7 +306,7 @@ def get_all_event():
     for event in sortedEvents:
 
         #   Check if event is expired
-        if event['endDateTime'] < currentDatetime:
+        if event['endDateTime'] < currentDatetime and event['eventStatus'] == 'On-going':
             #   Update event status to expired
             collection.update_one( { 'eventID' : event['eventID'] }, { '$set' : {
                 'eventStatus' : 'Expired'
@@ -338,7 +338,7 @@ def get_event( eventID: str ):
     currentDatetime = datetime.datetime.now()
 
     #   Check if event is expired
-    if event['endDateTime'] < currentDatetime:
+    if event['endDateTime'] < currentDatetime and event['eventStatus'] == 'On-going':
         #   Update event status to expired
         collection.update_one( { 'eventID' : eventID }, { '$set' : {
             'eventStatus' : 'Expired'
@@ -851,7 +851,7 @@ def get_eo_event( organizerID: str ):
     for event in sortedEvents:
 
         #   Check if event is expired
-        if event['endDateTime'] < currentDatetime:
+        if event['endDateTime'] < currentDatetime and event['eventStatus'] == 'On-going':
             #   Update event status to expired
             event_collection.update_one( { 'eventID' : event['eventID'] }, { '$set' : {
                 'eventStatus' : 'Expired'
