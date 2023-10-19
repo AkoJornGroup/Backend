@@ -50,6 +50,7 @@ class Ticket( BaseModel ):
     eventName : str
     eventImage : str
     location : str
+    runNo : int
 
 class NewTicketClass( BaseModel ):
     className: str
@@ -59,6 +60,7 @@ class NewTicketClass( BaseModel ):
     columnNo: int
     validDatetime: datetime.datetime
     expiredDatetime: datetime.datetime
+    zoneSeatImage: str
 
 class TicketClass( BaseModel ):
     className: str
@@ -69,6 +71,7 @@ class TicketClass( BaseModel ):
     seatNo: Dict[str, str]  #   seatNo: status
     validDatetime: datetime.datetime
     expiredDatetime: datetime.datetime
+    zoneSeatImage: str
 
 class NewTicket( BaseModel ):
     eventID: str
@@ -102,7 +105,7 @@ class Event( BaseModel ):
     eventStatus: str
     tagName: List[str]
     posterImage: str
-    seatImage: List[str]
+    seatImage: str
     staff: List[str]
     ticketType: str
     ticketClass: List[TicketClass]
@@ -177,6 +180,7 @@ class EventSetting( BaseModel ):
     location: str
     posterImage: str
     ticketType: str
+    seatImage: str
 
 ##############################################################
 #
@@ -292,7 +296,24 @@ def get_all_event():
     #   Get all events
     events = list( collection.find( { 'eventStatus' : 'On-going' }, { '_id' : 0 } ) )
 
-    return events
+    #   Sort events by startDateTime
+    sortedEvents = sorted( events, key = lambda i: i['startDateTime'] )
+
+    #   Get current datetime
+    currentDatetime = datetime.datetime.now()
+
+    #   Loop for each event
+    for event in sortedEvents:
+
+        #   Check if event is expired
+        if event['endDateTime'] < currentDatetime:
+            #   Update event status to expired
+            collection.update_one( { 'eventID' : event['eventID'] }, { '$set' : {
+                'eventStatus' : 'Expired'
+            } } )
+            event['eventStatus'] = 'Expired'
+
+    return sortedEvents
 
 #   Get Event Details
 @app.get('/event/{eventID}', tags=['Events'])
@@ -308,6 +329,22 @@ def get_event( eventID: str ):
 
     #   Get event details
     event = collection.find_one( { 'eventID' : eventID }, { '_id' : 0 } )
+
+    #   Check if eventID exists
+    if not event:
+        raise HTTPException( status_code = 400, detail = 'Event not found' )
+    
+    #   Get current datetime
+    currentDatetime = datetime.datetime.now()
+
+    #   Check if event is expired
+    if event['endDateTime'] < currentDatetime:
+        #   Update event status to expired
+        collection.update_one( { 'eventID' : eventID }, { '$set' : {
+            'eventStatus' : 'Expired'
+        } } )
+        event['eventStatus'] = 'Expired'
+
     return event
 
 #   Normal User Sign Up
@@ -403,6 +440,20 @@ def get_user_ticket( userID: str ):
     #   Sort tickets by ticket status
     status_order = { 'available' : 0, 'scanned' : 1, 'expired' : 2, 'transferred' : 3 }
     sortedTickets = sorted( tickets, key = lambda i: (status_order[i['status']], i['validDatetime']) )
+
+    #   Get current datetime
+    currentDatetime = datetime.datetime.now()
+
+    #   Loop for each ticket
+    for ticket in sortedTickets:
+
+        #   Check if ticket is expired
+        if ticket['expiredDatetime'] < currentDatetime:
+            #   Update ticket status to expired
+            ticket_collection.update_one( { 'ticketID' : ticket['ticketID'] }, { '$set' : {
+                'status' : 'expired'
+            } } )
+            ticket['status'] = 'expired'
 
     return sortedTickets
 
@@ -580,7 +631,8 @@ def post_new_ticket( new_ticket: NewTicket ):
             userID = new_ticket.userID,
             eventName = event['eventName'],
             eventImage = event['posterImage'],
-            location = event['location']
+            location = event['location'],
+            runNo = event['soldTicket'] + 1,
         )
         ticket_collection.insert_one( newTicket.dict() )
 
@@ -671,7 +723,9 @@ def transfer_ticket( srcUserID: str, ticketID: str, dstUserEmail: str ):
         userID = dstUser['userID'],
         eventName = ticket['eventName'],
         eventImage = ticket['eventImage'],
-        location = ticket['location']
+        location = ticket['location'],
+        zoneSeatImage = ticket['zoneSeatImage'],
+        runNo = ticket['runNo']
     )
     ticket_collection.insert_one( newTicket.dict() )
 
@@ -790,6 +844,20 @@ def get_eo_event( organizerID: str ):
     #   Sort events by status
     sortedEvents = sorted( events, key = lambda i: (status_order[i['eventStatus']], i['startDateTime']) )
 
+    #   Get current datetime
+    currentDatetime = datetime.datetime.now()
+
+    #   Loop for each event
+    for event in sortedEvents:
+
+        #   Check if event is expired
+        if event['endDateTime'] < currentDatetime:
+            #   Update event status to expired
+            event_collection.update_one( { 'eventID' : event['eventID'] }, { '$set' : {
+                'eventStatus' : 'Expired'
+            } } )
+            event['eventStatus'] = 'Expired'
+
     return sortedEvents
 
 #   Get All Ticket Sold by Event Organizer and Event ID
@@ -852,7 +920,7 @@ def post_create_event( organizerID: str ):
         eventStatus = 'Draft',
         tagName = [],
         posterImage = '',
-        seatImage = [],
+        seatImage = '',
         organizationName = eo['organizerName'],
         staff = [],
         ticketType = '',
@@ -902,6 +970,48 @@ def delete_event( organizerID: str, eventID: str ):
     
     #   Delete event
     event_collection.delete_one( { 'eventID' : eventID } )
+
+    return { 'result' : 'success' }
+
+#   Post Publish Event by Event Organizer and Event ID
+@app.post('/eo_publish_event/{organizerID}/{eventID}', tags=['Event Organizer'])
+def post_publish_event( organizerID: str, eventID: str ):
+    '''
+        Post publish event by event organizer and eventID
+        Input: organizerID (str), eventID (str)
+        Output: result (dict)
+    '''
+
+    #   Connect to MongoDB
+    eo_collection = db['EventOrganizer']
+    event_collection = db['Events']
+
+    #   Check if organizerID exists
+    eo = eo_collection.find_one( { 'organizerID' : organizerID }, { '_id' : 0 } )
+    if not eo:
+        raise HTTPException( status_code = 400, detail = 'Organizer not found' )
+    
+    #   Check if eventID exists
+    event = event_collection.find_one( { 'eventID' : eventID }, { '_id' : 0 } )
+    if not event or event['organizerName'] != eo['organizerName']:
+        raise HTTPException( status_code = 400, detail = 'Event not found' )
+    
+    #   Check if event is Draft
+    if event['eventStatus'] != 'Draft':
+        raise HTTPException( status_code = 400, detail = 'Event is not Draft' )
+    
+    #   Check if event is ready to publish
+    if event['eventName'] == '' or event['location'] == '' or event['info'] == '' or event['posterImage'] == '' or len( event['tagName'] ) == 0 or len( event['ticketClass'] ) == 0:
+        raise HTTPException( status_code = 400, detail = 'Event is not ready to publish' )
+    
+    #   Check if event date is past
+    if event['startDateTime'] < datetime.datetime.now():
+        raise HTTPException( status_code = 400, detail = 'Event date is past' )
+
+    #   Update event status to On-going
+    event_collection.update_one( { 'eventID' : eventID }, { '$set' : {
+        'eventStatus' : 'On-going'
+    } } )
 
     return { 'result' : 'success' }
 
@@ -959,6 +1069,7 @@ def post_event_setting( organizerID: str, eventID: str, eventSetting: EventSetti
         'posterImage' : eventSetting.posterImage,
         'tagName' : eventSetting.tagName,
         'ticketType' : eventSetting.ticketType,
+        'seatImage' : eventSetting.seatImage
     } } )
 
     return { 'result' : 'success' }
@@ -1011,6 +1122,10 @@ def post_create_ticket_type( organizerID: str, eventID: str, ticketType: NewTick
     if ticketType.validDatetime > ticketType.expiredDatetime:
         raise HTTPException( status_code = 400, detail = 'Valid Time After Expired Time' )
     
+    #   Check if event is Draft
+    if event['eventStatus'] != 'Draft':
+        raise HTTPException( status_code = 400, detail = 'Event is not Draft' )
+    
     #   Create seatNo
     seatNo = {}
     for i in range( ticketType.rowNo ):
@@ -1026,7 +1141,8 @@ def post_create_ticket_type( organizerID: str, eventID: str, ticketType: NewTick
         columnNo = ticketType.columnNo,
         seatNo = seatNo,
         validDatetime = ticketType.validDatetime,
-        expiredDatetime = ticketType.expiredDatetime
+        expiredDatetime = ticketType.expiredDatetime,
+        zoneSeatImage = ticketType.zoneSeatImage
     )
 
     #   Insert ticketType to database
@@ -1069,6 +1185,10 @@ def delete_ticket_type( organizerID: str, eventID: str, className: str ):
             break
         if ticketClass['className'] == event['ticketClass'][-1]['className']:
             raise HTTPException( status_code = 400, detail = 'Ticket type not found' )
+        
+    #   Check if event is Draft
+    if event['eventStatus'] != 'Draft':
+        raise HTTPException( status_code = 400, detail = 'Event is not Draft' )
         
     #   Delete ticketType
     event_collection.update_one( { 'eventID' : eventID }, { '$pull' : { 'ticketClass' : { 'className' : className } } } )
@@ -1297,7 +1417,14 @@ def get_staff_event( userID: str ):
 
     events = []
     for event in eventID:
-        events.append( eventCollection.find_one( { 'eventID' : event }, { '_id' : 0 } ) )
+        currentEvent = eventCollection.find_one( { 'eventID' : event }, { '_id' : 0 } )
+        #   Check if event is Expired
+        if currentEvent['eventStatus'] == 'Expired':
+            #   Remove event from staff
+            userCollection.update_one( { 'userID' : userID }, { '$pull' : { 'event' : event } } )
+            continue
+
+        events.append( currentEvent )
 
     sortedEvents = sorted( events, key = lambda i: i['startDateTime'] )
 
