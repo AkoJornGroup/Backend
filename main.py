@@ -73,6 +73,12 @@ class TicketClass( BaseModel ):
     expiredDatetime: datetime.datetime
     zoneSeatImage: str
 
+class ReservedTicket( BaseModel ):
+    eventID: str
+    userID: str
+    className: str
+    seatNo: List[str]
+
 class NewTicket( BaseModel ):
     eventID: str
     userID: str
@@ -557,6 +563,126 @@ def user_reset_password( user_reset_password: User_Reset_Password ):
 
     return { 'result' : 'success' }
 
+#   Post Reserve Ticket
+@app.post('/reserve_ticket', tags=['Users'])
+def post_reserve_ticket( reserved_ticket: ReservedTicket ):
+    '''
+        Post reserve ticket
+        Input: reserved_ticket (ReservedTicket)
+        Output: result (dict)
+    '''
+
+    #   Connect to MongoDB
+    user_collection = db['User']
+    event_collection = db['Events']
+    ticket_collection = db['Ticket']
+    transaction_collection = db['TicketTransaction']
+
+    #   Check if userID exists
+    user = user_collection.find_one( { 'userID' : reserved_ticket.userID }, { '_id' : 0 } )
+    if not user:
+        raise HTTPException( status_code = 400, detail = 'User not found' )
+    
+    #   Check if eventID exists
+    event = event_collection.find_one( { 'eventID' : reserved_ticket.eventID }, { '_id' : 0 } )
+    if not event:
+        raise HTTPException( status_code = 400, detail = 'Event not found' )
+
+    #   Check if wrong ticket class
+    for i in range( len( event['ticketClass'] ) ):
+        if event['ticketClass'][i]['className'] == reserved_ticket.className:
+            break
+        if i == len( event['ticketClass'] ) - 1:
+            raise HTTPException( status_code = 400, detail = 'Wrong ticket class' )
+        
+    #   Check if no seatNo
+    if len( reserved_ticket.seatNo ) == 0:
+        raise HTTPException( status_code = 400, detail = 'Please select seat' )
+    
+    #   Check if seatNo is already taken or wrong seatNo
+    #       Loop find ticketClass
+    if reserved_ticket.seatNo[0] != '':
+        for ticketClass in event['ticketClass']:
+            if ticketClass['className'] == reserved_ticket.className:
+                for seatNo in reserved_ticket.seatNo:
+                    if seatNo not in ticketClass['seatNo']:
+                        raise HTTPException( status_code = 400, detail = f'{seatNo} Seat not found' )
+                    if ticketClass['seatNo'][seatNo] != 'vacant':
+                        raise HTTPException( status_code = 400, detail = f'{seatNo} Seat already taken' )
+                break
+    
+    #   Reserve ticket
+    #       Loop find ticketClass
+    for ticketClass in event['ticketClass']:
+        if ticketClass['className'] == reserved_ticket.className:
+            for seatNo in reserved_ticket.seatNo:
+                event_collection.update_one( { 'eventID' : reserved_ticket.eventID }, { '$set' : {
+                    f'ticketClass.{i}.seatNo.{seatNo}' : 'reserved'
+                } } )
+            break
+
+    return { 'result' : 'success' }
+
+#   Post Cancel Reserve Ticket
+@app.post('/cancel_reserve_ticket', tags=['Users'])
+def post_cancel_reserve_ticket( reserved_ticket: ReservedTicket ):
+    '''
+        Post cancel reserve ticket
+        Input: reserved_ticket (ReservedTicket)
+        Output: result (dict)
+    '''
+
+    #   Connect to MongoDB
+    user_collection = db['User']
+    event_collection = db['Events']
+    ticket_collection = db['Ticket']
+    transaction_collection = db['TicketTransaction']
+
+    #   Check if userID exists
+    user = user_collection.find_one( { 'userID' : reserved_ticket.userID }, { '_id' : 0 } )
+    if not user:
+        raise HTTPException( status_code = 400, detail = 'User not found' )
+    
+    #   Check if eventID exists
+    event = event_collection.find_one( { 'eventID' : reserved_ticket.eventID }, { '_id' : 0 } )
+    if not event:
+        raise HTTPException( status_code = 400, detail = 'Event not found' )
+
+    #   Check if wrong ticket class
+    for i in range( len( event['ticketClass'] ) ):
+        if event['ticketClass'][i]['className'] == reserved_ticket.className:
+            break
+        if i == len( event['ticketClass'] ) - 1:
+            raise HTTPException( status_code = 400, detail = 'Wrong ticket class' )
+        
+    #   Check if no seatNo
+    if len( reserved_ticket.seatNo ) == 0:
+        raise HTTPException( status_code = 400, detail = 'Please select seat' )
+    
+    #   Check if seatNo is not reserved or wrong seatNo
+    #       Loop find ticketClass
+    if reserved_ticket.seatNo[0] != '':
+        for ticketClass in event['ticketClass']:
+            if ticketClass['className'] == reserved_ticket.className:
+                for seatNo in reserved_ticket.seatNo:
+                    if seatNo not in ticketClass['seatNo']:
+                        raise HTTPException( status_code = 400, detail = f'{seatNo} Seat not found' )
+                    if ticketClass['seatNo'][seatNo] != 'reserved':
+                        raise HTTPException( status_code = 400, detail = f'{seatNo} Seat not reserved' )
+                break
+    
+    #   Cancel reserve ticket
+    #       Loop find ticketClass
+    for ticketClass in event['ticketClass']:
+        if ticketClass['className'] == reserved_ticket.className:
+            for seatNo in reserved_ticket.seatNo:
+                event_collection.update_one( { 'eventID' : reserved_ticket.eventID }, { '$set' : {
+                    f'ticketClass.{i}.seatNo.{seatNo}' : 'vacant'
+                } } )
+            break
+    
+    return { 'result' : 'success' }
+
 #   Post New Ticket
 @app.post('/post_ticket', tags=['Users'])
 def post_new_ticket( new_ticket: NewTicket ):
@@ -609,7 +735,7 @@ def post_new_ticket( new_ticket: NewTicket ):
                 for seatNo in new_ticket.seatNo:
                     if seatNo not in ticketClass['seatNo']:
                         raise HTTPException( status_code = 400, detail = f'{seatNo} Seat not found' )
-                    if ticketClass['seatNo'][seatNo] != 'vacant':
+                    if ticketClass['seatNo'][seatNo] != 'reserved':
                         raise HTTPException( status_code = 400, detail = f'{seatNo} Seat already taken' )
                 break
 
