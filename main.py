@@ -428,6 +428,7 @@ def get_user_ticket( userID: str ):
     #   Connect to MongoDB
     user_collection = db['User']
     ticket_collection = db['Ticket']
+    transaction_collection = db['TicketTransaction']
 
     #   Check if userID exists
     user = user_collection.find_one( { 'userID' : userID }, { '_id' : 0 } )
@@ -454,6 +455,14 @@ def get_user_ticket( userID: str ):
                 'status' : 'expired'
             } } )
             ticket['status'] = 'expired'
+
+            #   Add transaction
+            newTransaction = {
+                'ticketID' : ticket['ticketID'],
+                'timestamp' : datetime.datetime.now(),
+                'transactionType' : 'expired'
+            }
+            transaction_collection.insert_one( newTransaction )
 
     return sortedTickets
 
@@ -561,6 +570,7 @@ def post_new_ticket( new_ticket: NewTicket ):
     user_collection = db['User']
     event_collection = db['Events']
     ticket_collection = db['Ticket']
+    transaction_collection = db['TicketTransaction']
 
     #   Check if userID exists
     user = user_collection.find_one( { 'userID' : new_ticket.userID }, { '_id' : 0 } )
@@ -636,6 +646,14 @@ def post_new_ticket( new_ticket: NewTicket ):
         )
         ticket_collection.insert_one( newTicket.dict() )
 
+        #   Add transaction
+        newTransaction = {
+            'ticketID' : ticketID,
+            'timestamp' : datetime.datetime.now(),
+            'transactionType' : 'created'
+        }
+        transaction_collection.insert_one( newTransaction )
+
     #   Update Event ticketClass
     #       Loop find ticketClass
     for i in range( len( event['ticketClass'] ) ):
@@ -678,6 +696,7 @@ def transfer_ticket( srcUserID: str, ticketID: str, dstUserEmail: str ):
     #   Connect to MongoDB
     user_collection = db['User']
     ticket_collection = db['Ticket']
+    transaction_collection = db['TicketTransaction']
 
     #   Check if srcUserID exists
     srcUser = user_collection.find_one( { 'userID' : srcUserID }, { '_id' : 0 } )
@@ -708,6 +727,13 @@ def transfer_ticket( srcUserID: str, ticketID: str, dstUserEmail: str ):
         ticket_collection.update_one( { 'ticketID' : ticketID }, { '$set' : {
             'status' : 'expired'
         } } )
+        #   Add transaction
+        newTransaction = {
+            'ticketID' : ticketID,
+            'timestamp' : datetime.datetime.now(),
+            'transactionType' : 'expired'
+        }
+        transaction_collection.insert_one( newTransaction )
         raise HTTPException( status_code = 400, detail = 'Ticket is expired' )
     
     #   Create new ticket
@@ -724,7 +750,6 @@ def transfer_ticket( srcUserID: str, ticketID: str, dstUserEmail: str ):
         eventName = ticket['eventName'],
         eventImage = ticket['eventImage'],
         location = ticket['location'],
-        zoneSeatImage = ticket['zoneSeatImage'],
         runNo = ticket['runNo']
     )
     ticket_collection.insert_one( newTicket.dict() )
@@ -733,6 +758,22 @@ def transfer_ticket( srcUserID: str, ticketID: str, dstUserEmail: str ):
     ticket_collection.update_one( { 'ticketID' : ticketID }, { '$set' : {
         'status' : 'transferred'
     } } )
+
+    #   Add transaction
+    newTransaction1 = {
+        'ticketID' : newTicketID,
+        'timestamp' : datetime.datetime.now(),
+        'transactionType' : 'received',
+        'srcUserID' : srcUserID
+    }
+    newTransaction2 = {
+        'ticketID' : ticketID,
+        'timestamp' : datetime.datetime.now(),
+        'transactionType' : 'transferred',
+        'dstUserID' : dstUser['userID']
+    }
+    transaction_collection.insert_one( newTransaction1 )
+    transaction_collection.insert_one( newTransaction2 )
 
     returnObj = {
         'ticketID' : newTicketID,
@@ -1348,6 +1389,7 @@ def scan_ticket( eventID: str, ticketID: str ):
 
     #   Connect to MongoDB
     collection = db['Ticket']
+    transaction_collection = db['TicketTransaction']
 
     #   Check if ticketID exists
     ticket = collection.find_one( { 'ticketID' : ticketID }, { '_id' : 0 } )
@@ -1373,6 +1415,14 @@ def scan_ticket( eventID: str, ticketID: str ):
     #   Update ticket status
     if ticket['status'] == 'available':
         collection.update_one( { 'ticketID' : ticketID }, { '$set' : { 'status' : 'scanned' } } )
+
+    #   Add transaction
+    newTransaction = {
+        'ticketID' : ticketID,
+        'timestamp' : datetime.datetime.now(),
+        'transactionType' : 'scanned',
+    }
+    transaction_collection.insert_one( newTransaction )
 
     return ticket
 
