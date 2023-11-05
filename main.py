@@ -749,8 +749,12 @@ def post_new_ticket( new_ticket: NewTicket ):
             expiredDatetime = ticketClass['expiredDatetime']
             break
     
+    cou = 0
     #   Loop for each seatNo
     for seatNo in new_ticket.seatNo:
+
+        #   Update Counter
+        cou = cou + 1
 
         #   Generate ticketID
         ticketID = generate_ticketID( new_ticket.eventID, new_ticket.userID, new_ticket.className, seatNo )
@@ -768,7 +772,7 @@ def post_new_ticket( new_ticket: NewTicket ):
             eventName = event['eventName'],
             eventImage = event['posterImage'],
             location = event['location'],
-            runNo = event['soldTicket'] + 1,
+            runNo = event['soldTicket'] + cou,
         )
         ticket_collection.insert_one( newTicket.dict() )
 
