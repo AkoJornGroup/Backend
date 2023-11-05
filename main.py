@@ -1321,6 +1321,11 @@ def post_create_ticket_type( organizerID: str, eventID: str, ticketType: NewTick
         quota = ticketType.amountOfSeat,
     ).dict() } } )
 
+    #   Update totalTicket
+    event_collection.update_one( { 'eventID' : eventID }, { '$set' : {
+        'totalTicket' : event['totalTicket'] + ticketType.amountOfSeat
+    } } )
+
     return { 'result' : 'success' }
 
 #   Delete Ticket Type by Event Organizer and Event ID
