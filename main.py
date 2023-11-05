@@ -1138,6 +1138,10 @@ def delete_event( organizerID: str, eventID: str ):
     event = event_collection.find_one( { 'eventID' : eventID }, { '_id' : 0 } )
     if not event or event['organizerName'] != eo['organizerName']:
         raise HTTPException( status_code = 400, detail = 'Event not found' )
+
+    #   Check if event is Draft
+    if event['eventStatus'] != 'Draft':
+        raise HTTPException( status_code = 400, detail = 'Event is not Draft' )
     
     #   Delete event
     event_collection.delete_one( { 'eventID' : eventID } )
@@ -1370,6 +1374,16 @@ def delete_ticket_type( organizerID: str, eventID: str, className: str ):
     event_collection.update_one( { 'eventID' : eventID }, { '$pull' : { 'ticketClass' : { 'className' : className } } } )
     event_collection.update_one( { 'eventID' : eventID }, { '$pull' : { 'zoneRevenue' : { 'className' : className } } } )
 
+    #   Update totalTicket
+    event_collection.update_one( { 'eventID' : eventID }, { '$set' : {
+        'totalTicket' : event['totalTicket'] - ticketClass['amountOfSeat']
+    } } )
+
+    #   Update totalTicketValue
+    event_collection.update_one( { 'eventID' : eventID }, { '$set' : {
+        'totalTicketValue' : event['totalTicketValue'] - ticketClass['amountOfSeat'] * ticketClass['pricePerSeat']
+    } } )
+
     return { 'result' : 'success' }
 
 #   Get All Staff by Event Organizer and Event ID
@@ -1546,6 +1560,18 @@ def scan_ticket( eventID: str, ticketID: str ):
     #   Check if ticket is transferred
     if ticket['status'] == 'transferred':
         raise HTTPException( status_code = 400, detail = 'Ticket transferred' )
+    
+    #   Check validDatetime
+    if ticket['validDatetime'] > datetime.datetime.now():
+        raise HTTPException( status_code = 400, detail = 'Ticket not valid yet' )
+    
+    #   Check expiredDatetime
+    if ticket['expiredDatetime'] < datetime.datetime.now():
+        #   Update ticket status to expired
+        collection.update_one( { 'ticketID' : ticketID }, { '$set' : {
+            'status' : 'expired'
+        } } )
+        raise HTTPException( status_code = 400, detail = 'Ticket expired' )
     
     #   Update ticket status
     if ticket['status'] == 'available':
